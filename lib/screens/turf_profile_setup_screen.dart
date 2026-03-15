@@ -8,10 +8,14 @@ import 'turf_home_screen.dart';
 
 class TurfProfileSetupScreen extends StatefulWidget {
   final String ownerId;
+  final TurfModel? existingTurf;
+  final bool navigateToHomeOnSave;
 
   const TurfProfileSetupScreen({
     Key? key,
     required this.ownerId,
+    this.existingTurf,
+    this.navigateToHomeOnSave = true,
   }) : super(key: key);
 
   @override
@@ -58,6 +62,25 @@ class _TurfProfileSetupScreenState extends State<TurfProfileSetupScreen> {
     for (String game in games.keys) {
       courtControllers[game] = TextEditingController();
     }
+    _populateExistingData();
+  }
+
+  void _populateExistingData() {
+    final turf = widget.existingTurf;
+    if (turf == null) return;
+
+    turfNameController.text = turf.name;
+    locationController.text = turf.location;
+    priceController.text = turf.pricePerHour.toStringAsFixed(0);
+    contactController.text = turf.contact ?? '';
+    facilities = List<String>.from(turf.facilities);
+
+    for (final game in turf.gamesAvailable) {
+      if (games.containsKey(game)) {
+        games[game] = true;
+        courtControllers[game]?.text = (turf.courts[game] ?? 0).toString();
+      }
+    }
   }
 
   Future<void> _saveProfile() async {
@@ -89,33 +112,53 @@ class _TurfProfileSetupScreenState extends State<TurfProfileSetupScreen> {
     setState(() => isLoading = true);
 
     try {
-      final turfId = Uuid().v4();
       Map<String, int> courts = {};
       for (String game in selectedGames) {
         courts[game] = int.parse(courtControllers[game]!.text);
       }
 
-      final turf = TurfModel(
-        turfId: turfId,
-        ownerId: widget.ownerId,
-        name: turfNameController.text.trim(),
-        location: locationController.text.trim(),
-        gamesAvailable: selectedGames,
-        courts: courts,
-        pricePerHour: double.tryParse(priceController.text) ?? 0.0,
-        facilities: facilities,
-        contact: contactController.text.trim(),
-        createdAt: DateTime.now(),
-      );
+      final existingTurf = widget.existingTurf;
 
-      await _firestoreService.createTurf(turf);
-      await _authService.updateProfileCompletion(widget.ownerId, true);
+      if (existingTurf == null) {
+        final turf = TurfModel(
+          turfId: Uuid().v4(),
+          ownerId: widget.ownerId,
+          name: turfNameController.text.trim(),
+          location: locationController.text.trim(),
+          gamesAvailable: selectedGames,
+          courts: courts,
+          pricePerHour: double.tryParse(priceController.text) ?? 0.0,
+          facilities: facilities,
+          contact: contactController.text.trim(),
+          createdAt: DateTime.now(),
+        );
+
+        await _firestoreService.createTurf(turf);
+        await _authService.updateProfileCompletion(widget.ownerId, true);
+      } else {
+        await _firestoreService.updateTurf(existingTurf.turfId, {
+          'name': turfNameController.text.trim(),
+          'turfName': turfNameController.text.trim(),
+          'location': locationController.text.trim(),
+          'gamesAvailable': selectedGames,
+          'gameTypes': selectedGames,
+          'courts': courts,
+          'pricePerHour': double.tryParse(priceController.text) ?? 0.0,
+          'facilities': facilities,
+          'contact': contactController.text.trim(),
+          'isActive': existingTurf.isActive,
+        });
+      }
 
       if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => TurfHomeScreen()),
-        );
+        if (widget.navigateToHomeOnSave) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => TurfHomeScreen()),
+          );
+        } else {
+          Navigator.pop(context, true);
+        }
       }
     } catch (e) {
       showMessage('Error saving profile: $e');
@@ -148,7 +191,9 @@ class _TurfProfileSetupScreenState extends State<TurfProfileSetupScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Complete Turf Profile'),
+        title: Text(
+          widget.existingTurf == null ? 'Complete Turf Profile' : 'Edit Turf Profile',
+        ),
         backgroundColor: AppTheme.theme.primaryColor,
         foregroundColor: Colors.white,
       ),
@@ -160,7 +205,7 @@ class _TurfProfileSetupScreenState extends State<TurfProfileSetupScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Welcome!',
+                widget.existingTurf == null ? 'Welcome!' : 'Edit Turf Details',
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -168,7 +213,9 @@ class _TurfProfileSetupScreenState extends State<TurfProfileSetupScreen> {
               ),
               SizedBox(height: 10),
               Text(
-                'Complete your turf profile to get started',
+                widget.existingTurf == null
+                    ? 'Complete your turf profile to get started'
+                    : 'Update your turf information and keep it current',
                 style: TextStyle(color: Colors.grey[600]),
               ),
               SizedBox(height: 30),
@@ -350,7 +397,9 @@ class _TurfProfileSetupScreenState extends State<TurfProfileSetupScreen> {
                         ),
                       )
                     : Text(
-                        'Complete Profile',
+                        widget.existingTurf == null
+                            ? 'Complete Profile'
+                            : 'Save Changes',
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
               ),

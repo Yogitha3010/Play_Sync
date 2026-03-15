@@ -3,6 +3,7 @@ import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../models/turf_model.dart';
 import '../theme/app_theme.dart';
+import 'turf_profile_setup_screen.dart';
 
 class MyTurfsScreen extends StatefulWidget {
   @override
@@ -27,7 +28,10 @@ class _MyTurfsScreenState extends State<MyTurfsScreen> {
 
     try {
       final currentUser = _authService.currentUser;
-      if (currentUser == null) return;
+      if (currentUser == null) {
+        setState(() => isLoading = false);
+        return;
+      }
 
       final turfsData = await _firestoreService.getTurfsByOwner(currentUser.uid);
       setState(() {
@@ -42,6 +46,26 @@ class _MyTurfsScreenState extends State<MyTurfsScreen> {
     }
   }
 
+  Future<void> _openTurfForm({TurfModel? turf}) async {
+    final currentUser = _authService.currentUser;
+    if (currentUser == null) return;
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TurfProfileSetupScreen(
+          ownerId: currentUser.uid,
+          existingTurf: turf,
+          navigateToHomeOnSave: false,
+        ),
+      ),
+    );
+
+    if (mounted) {
+      _loadTurfs();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -49,6 +73,13 @@ class _MyTurfsScreenState extends State<MyTurfsScreen> {
         title: Text('My Turfs'),
         backgroundColor: AppTheme.theme.primaryColor,
         foregroundColor: Colors.white,
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _openTurfForm(),
+        backgroundColor: AppTheme.theme.colorScheme.primary,
+        foregroundColor: Colors.white,
+        icon: Icon(Icons.add),
+        label: Text('Add Turf'),
       ),
       body: isLoading
           ? Center(child: CircularProgressIndicator())
@@ -64,6 +95,16 @@ class _MyTurfsScreenState extends State<MyTurfsScreen> {
                         style: TextStyle(
                           fontSize: 18,
                           color: Colors.grey[600],
+                        ),
+                      ),
+                      SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: () => _openTurfForm(),
+                        icon: Icon(Icons.add_business),
+                        label: Text('Add Turf Details'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.theme.colorScheme.primary,
+                          foregroundColor: Colors.white,
                         ),
                       ),
                     ],
@@ -113,6 +154,12 @@ class _MyTurfsScreenState extends State<MyTurfsScreen> {
                                       fontSize: 12,
                                     ),
                                   ),
+                                ),
+                                SizedBox(width: 8),
+                                IconButton(
+                                  onPressed: () => _openTurfForm(turf: turf),
+                                  icon: Icon(Icons.edit, color: AppTheme.theme.colorScheme.primary),
+                                  tooltip: 'Edit turf',
                                 ),
                               ],
                             ),

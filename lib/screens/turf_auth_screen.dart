@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import 'turf_home_screen.dart';
+import 'turf_profile_setup_screen.dart';
 import 'turf_register_screen.dart';
 
 class TurfLoginScreen extends StatefulWidget {
@@ -16,8 +18,10 @@ class _TurfLoginScreenState extends State<TurfLoginScreen> {
   final passwordController = TextEditingController();
 
   bool isLoading = false;
+  bool isPasswordVisible = false;
 
   final AuthService _authService = AuthService();
+  final FirestoreService _firestoreService = FirestoreService();
 
   void showMessage(String message, {bool isError = true}) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -49,9 +53,19 @@ class _TurfLoginScreenState extends State<TurfLoginScreen> {
           return;
         }
 
+        final userData = await _authService.getUserData(userCredential.user!.uid);
+        final ownerTurfs = await _firestoreService.getTurfsByOwner(
+          userCredential.user!.uid,
+        );
+
+        final nextScreen =
+            (userData == null || !userData.profileCompleted || ownerTurfs.isEmpty)
+            ? TurfProfileSetupScreen(ownerId: userCredential.user!.uid)
+            : TurfHomeScreen();
+
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => TurfHomeScreen()),
+          MaterialPageRoute(builder: (_) => nextScreen),
         );
       }
     } catch (e) {
@@ -153,13 +167,25 @@ class _TurfLoginScreenState extends State<TurfLoginScreen> {
                 /// Password
                 TextFormField(
                   controller: passwordController,
-                  obscureText: true,
+                  obscureText: !isPasswordVisible,
                   decoration: InputDecoration(
                     labelText: "Password",
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                     prefixIcon: Icon(Icons.lock),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        isPasswordVisible
+                            ? Icons.visibility_off
+                            : Icons.visibility,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          isPasswordVisible = !isPasswordVisible;
+                        });
+                      },
+                    ),
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {

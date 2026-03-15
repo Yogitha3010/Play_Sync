@@ -19,6 +19,8 @@ class _TurfRegisterScreenState extends State<TurfRegisterScreen> {
   final phoneController = TextEditingController();
 
   bool isLoading = false;
+  bool isPasswordVisible = false;
+  bool isConfirmPasswordVisible = false;
 
   final AuthService _authService = AuthService();
 
@@ -148,13 +150,25 @@ class _TurfRegisterScreenState extends State<TurfRegisterScreen> {
               /// Password
               TextFormField(
                 controller: passwordController,
-                obscureText: true,
+                obscureText: !isPasswordVisible,
                 decoration: InputDecoration(
                   labelText: "Password",
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                   prefixIcon: Icon(Icons.lock),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      isPasswordVisible
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        isPasswordVisible = !isPasswordVisible;
+                      });
+                    },
+                  ),
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
@@ -172,13 +186,25 @@ class _TurfRegisterScreenState extends State<TurfRegisterScreen> {
               /// Confirm Password
               TextFormField(
                 controller: confirmPasswordController,
-                obscureText: true,
+                obscureText: !isConfirmPasswordVisible,
                 decoration: InputDecoration(
                   labelText: "Confirm Password",
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                   prefixIcon: Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      isConfirmPasswordVisible
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        isConfirmPasswordVisible = !isConfirmPasswordVisible;
+                      });
+                    },
+                  ),
                 ),
                 validator: (value) {
                   if (value != passwordController.text) {

@@ -49,6 +49,10 @@ class FirestoreService {
     await FirebaseService.turfsCollection.doc(turf.turfId).set(turf.toMap());
   }
 
+  Future<void> updateTurf(String turfId, Map<String, dynamic> updates) async {
+    await FirebaseService.turfsCollection.doc(turfId).update(updates);
+  }
+
   Future<TurfModel?> getTurf(String turfId) async {
     final doc = await FirebaseService.turfsCollection.doc(turfId).get();
     if (doc.exists) {

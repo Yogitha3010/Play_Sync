@@ -16,6 +16,7 @@ class _PlayerLoginScreenState extends State<PlayerLoginScreen> {
   final passwordController = TextEditingController();
 
   bool isLoading = false;
+  bool isPasswordVisible = false;
 
   final AuthService _authService = AuthService();
 
@@ -183,13 +184,25 @@ class _PlayerLoginScreenState extends State<PlayerLoginScreen> {
                 /// Password
                 TextFormField(
                   controller: passwordController,
-                  obscureText: true,
+                  obscureText: !isPasswordVisible,
                   decoration: InputDecoration(
                     labelText: "Password",
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                     prefixIcon: Icon(Icons.lock),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        isPasswordVisible
+                            ? Icons.visibility_off
+                            : Icons.visibility,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          isPasswordVisible = !isPasswordVisible;
+                        });
+                      },
+                    ),
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
