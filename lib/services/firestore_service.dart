@@ -17,29 +17,31 @@ class FirestoreService {
   }
 
   Future<PlayerProfileModel?> getPlayerProfile(String userId) async {
-    final doc =
-        await FirebaseService.playerProfilesCollection.doc(userId).get();
+    final doc = await FirebaseService.playerProfilesCollection
+        .doc(userId)
+        .get();
     if (doc.exists) {
-      return PlayerProfileModel.fromMap(
-          doc.data() as Map<String, dynamic>);
+      return PlayerProfileModel.fromMap(doc.data() as Map<String, dynamic>);
     }
     return null;
   }
 
   Future<void> updatePlayerProfile(
-      String userId, Map<String, dynamic> updates) async {
+    String userId,
+    Map<String, dynamic> updates,
+  ) async {
     updates['lastUpdated'] = DateTime.now().toIso8601String();
-    await FirebaseService.playerProfilesCollection
-        .doc(userId)
-        .update(updates);
+    await FirebaseService.playerProfilesCollection.doc(userId).update(updates);
   }
 
   Stream<PlayerProfileModel> streamPlayerProfile(String userId) {
     return FirebaseService.playerProfilesCollection
         .doc(userId)
         .snapshots()
-        .map((doc) => PlayerProfileModel.fromMap(
-            doc.data() as Map<String, dynamic>));
+        .map(
+          (doc) =>
+              PlayerProfileModel.fromMap(doc.data() as Map<String, dynamic>),
+        );
   }
 
   // Turf Operations
@@ -68,7 +70,10 @@ class FirestoreService {
     String? gameType,
     String? location,
   }) async {
-    Query query = FirebaseService.turfsCollection.where('isActive', isEqualTo: true);
+    Query query = FirebaseService.turfsCollection.where(
+      'isActive',
+      isEqualTo: true,
+    );
 
     if (gameType != null) {
       query = query.where('gamesAvailable', arrayContains: gameType);
@@ -82,8 +87,10 @@ class FirestoreService {
     // Filter by location if provided (simple string matching)
     if (location != null && location.isNotEmpty) {
       turfs = turfs
-          .where((turf) =>
-              turf.location.toLowerCase().contains(location.toLowerCase()))
+          .where(
+            (turf) =>
+                turf.location.toLowerCase().contains(location.toLowerCase()),
+          )
           .toList();
     }
 
@@ -92,7 +99,9 @@ class FirestoreService {
 
   // Match Operations
   Future<void> createMatch(MatchModel match) async {
-    await FirebaseService.matchesCollection.doc(match.matchId).set(match.toMap());
+    await FirebaseService.matchesCollection
+        .doc(match.matchId)
+        .set(match.toMap());
   }
 
   Future<MatchModel?> getMatch(String matchId) async {
@@ -148,8 +157,7 @@ class FirestoreService {
         .orderBy('createdAt', descending: true)
         .get();
     return querySnapshot.docs
-        .map((doc) =>
-            FeedbackModel.fromMap(doc.data() as Map<String, dynamic>))
+        .map((doc) => FeedbackModel.fromMap(doc.data() as Map<String, dynamic>))
         .toList();
   }
 
@@ -158,8 +166,7 @@ class FirestoreService {
         .where('matchId', isEqualTo: matchId)
         .get();
     return querySnapshot.docs
-        .map((doc) =>
-            FeedbackModel.fromMap(doc.data() as Map<String, dynamic>))
+        .map((doc) => FeedbackModel.fromMap(doc.data() as Map<String, dynamic>))
         .toList();
   }
 
@@ -176,8 +183,9 @@ class FirestoreService {
         .orderBy('unlockedAt', descending: true)
         .get();
     return querySnapshot.docs
-        .map((doc) =>
-            AchievementModel.fromMap(doc.data() as Map<String, dynamic>))
+        .map(
+          (doc) => AchievementModel.fromMap(doc.data() as Map<String, dynamic>),
+        )
         .toList();
   }
 
@@ -198,20 +206,24 @@ class FirestoreService {
     return FirebaseService.teamsCollection
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => TeamModel.fromMap(doc.data() as Map<String, dynamic>))
-            .toList());
+        .map(
+          (snapshot) => snapshot.docs
+              .map(
+                (doc) => TeamModel.fromMap(doc.data() as Map<String, dynamic>),
+              )
+              .toList(),
+        );
   }
 
   Future<void> joinTeam(String teamId, String playerId) async {
     await FirebaseService.teamsCollection.doc(teamId).update({
-      'players': FieldValue.arrayUnion([playerId])
+      'players': FieldValue.arrayUnion([playerId]),
     });
   }
 
   Future<void> leaveTeam(String teamId, String playerId) async {
     await FirebaseService.teamsCollection.doc(teamId).update({
-      'players': FieldValue.arrayRemove([playerId])
+      'players': FieldValue.arrayRemove([playerId]),
     });
   }
 
@@ -235,6 +247,16 @@ class FirestoreService {
   Future<List<BookingModel>> getPlayerBookings(String playerId) async {
     final querySnapshot = await FirebaseService.bookingsCollection
         .where('playerId', isEqualTo: playerId)
+        .orderBy('bookingDate', descending: true)
+        .get();
+    return querySnapshot.docs
+        .map((doc) => BookingModel.fromMap(doc.data() as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<BookingModel>> getOwnerBookings(String ownerId) async {
+    final querySnapshot = await FirebaseService.bookingsCollection
+        .where('turfOwnerId', isEqualTo: ownerId)
         .orderBy('bookingDate', descending: true)
         .get();
     return querySnapshot.docs

@@ -6,6 +6,7 @@ import '../services/matchmaking_service.dart';
 import '../models/match_model.dart';
 import '../models/player_profile_model.dart';
 import '../models/turf_model.dart';
+import '../models/booking_model.dart';
 import '../theme/app_theme.dart';
 import 'match_detail_screen.dart';
 
@@ -23,11 +24,18 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
   String selectedGame = 'Cricket';
   TurfModel? selectedTurf;
   List<TurfModel> availableTurfs = [];
-  
+
   DateTime? scheduledTime;
   int maxPlayers = 10;
 
-  final List<String> games = ['Cricket', 'Badminton', 'Pickleball', 'Football', 'Basketball', 'Tennis'];
+  final List<String> games = [
+    'Cricket',
+    'Badminton',
+    'Pickleball',
+    'Football',
+    'Basketball',
+    'Tennis',
+  ];
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
 
@@ -46,9 +54,9 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
         selectedTurf = turfs.isNotEmpty ? turfs.first : null;
       });
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load turfs: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to load turfs: $e')));
     } finally {
       setState(() => isLoading = false);
     }
@@ -60,9 +68,9 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
     }
 
     if (selectedTurf == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please select a Turf location')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Please select a Turf location')));
       return;
     }
 
@@ -88,6 +96,28 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
 
       await _firestoreService.createMatch(match);
 
+      // Create booking for the match
+      final turf = await _firestoreService.getTurf(match.turfId);
+      if (turf != null && match.scheduledTime != null) {
+        final booking = BookingModel(
+          bookingId: Uuid().v4(),
+          turfId: match.turfId,
+          turfOwnerId: turf.ownerId,
+          playerId: currentUser.uid,
+          matchId: match.matchId,
+          gameType: selectedGame,
+          bookingDate: DateTime(
+            match.scheduledTime!.year,
+            match.scheduledTime!.month,
+            match.scheduledTime!.day,
+          ),
+          slotTime:
+              '${match.scheduledTime!.hour}:${match.scheduledTime!.minute.toString().padLeft(2, '0')} - ${match.scheduledTime!.hour + 1}:${match.scheduledTime!.minute.toString().padLeft(2, '0')}',
+          createdAt: DateTime.now(),
+        );
+        await _firestoreService.createBooking(booking);
+      }
+
       if (mounted) {
         Navigator.pushReplacement(
           context,
@@ -97,9 +127,9 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error creating match: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error creating match: $e')));
     } finally {
       if (mounted) {
         setState(() => isLoading = false);
@@ -158,10 +188,7 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
             children: [
               Text(
                 'Create a New Match',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
               SizedBox(height: 10),
               Text(
@@ -185,16 +212,13 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
                   prefixIcon: Icon(Icons.sports_soccer),
                 ),
                 items: games.map((game) {
-                  return DropdownMenuItem(
-                    value: game,
-                    child: Text(game),
-                  );
+                  return DropdownMenuItem(value: game, child: Text(game));
                 }).toList(),
                 onChanged: (value) {
                   if (value != null) {
                     setState(() {
-                       selectedGame = value;
-                       selectedTurf = null;
+                      selectedGame = value;
+                      selectedTurf = null;
                     });
                     _loadTurfsForGame(value);
                   }
@@ -215,7 +239,9 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   prefixIcon: Icon(Icons.location_on),
-                  hintText: availableTurfs.isEmpty ? 'No turfs available for this sport' : 'Select a Turf',
+                  hintText: availableTurfs.isEmpty
+                      ? 'No turfs available for this sport'
+                      : 'Select a Turf',
                 ),
                 items: availableTurfs.map((turf) {
                   return DropdownMenuItem(
@@ -226,7 +252,8 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
                 onChanged: (value) {
                   setState(() => selectedTurf = value);
                 },
-                validator: (value) => value == null ? 'Please select a Turf location' : null,
+                validator: (value) =>
+                    value == null ? 'Please select a Turf location' : null,
               ),
               SizedBox(height: 20),
 
@@ -295,12 +322,17 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
                         width: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
                         ),
                       )
                     : Text(
                         'Create Match',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
               ),
             ],

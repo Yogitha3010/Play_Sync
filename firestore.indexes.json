@@ -85,7 +85,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "playerId",
+          "fieldPath": "turfOwnerId",
           "order": "ASCENDING"
         },
         {

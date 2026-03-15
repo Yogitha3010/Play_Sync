@@ -19,6 +19,15 @@ class _TurfLoginScreenState extends State<TurfLoginScreen> {
 
   final AuthService _authService = AuthService();
 
+  void showMessage(String message, {bool isError = true}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red : Colors.green,
+      ),
+    );
+  }
+
   Future<void> login() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -31,6 +40,15 @@ class _TurfLoginScreenState extends State<TurfLoginScreen> {
       );
 
       if (userCredential != null) {
+        // Check if email is verified
+        if (!userCredential.user!.emailVerified) {
+          showMessage(
+            'Please verify your email before logging in. Check your inbox for the verification link.',
+          );
+          await _authService.logout(); // Sign out unverified user
+          return;
+        }
+
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => TurfHomeScreen()),
@@ -45,10 +63,28 @@ class _TurfLoginScreenState extends State<TurfLoginScreen> {
     }
   }
 
-  void showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
-    );
+  Future<void> _forgotPassword() async {
+    final email = emailController.text.trim();
+    if (email.isEmpty) {
+      showMessage('Please enter your email address first');
+      return;
+    }
+    if (!email.contains('@')) {
+      showMessage('Please enter a valid email address');
+      return;
+    }
+
+    try {
+      await _authService.sendPasswordResetEmail(email);
+      showMessage(
+        'Password reset email sent. Check your inbox.',
+        isError: false,
+      );
+    } catch (e) {
+      showMessage(
+        'Failed to send reset email: ${e.toString().replaceAll('Exception: ', '')}',
+      );
+    }
   }
 
   @override
@@ -164,6 +200,23 @@ class _TurfLoginScreenState extends State<TurfLoginScreen> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
+                ),
+
+                SizedBox(height: 15),
+
+                /// Forgot Password
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: _forgotPassword,
+                    child: Text(
+                      'Forgot Password?',
+                      style: TextStyle(
+                        color: AppTheme.theme.colorScheme.primary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
                 ),
 
                 SizedBox(height: 25),

@@ -11,11 +11,8 @@ class TurfDetailScreen extends StatefulWidget {
   final TurfModel turf;
   final double distance;
 
-  const TurfDetailScreen({
-    Key? key,
-    required this.turf,
-    required this.distance,
-  }) : super(key: key);
+  const TurfDetailScreen({Key? key, required this.turf, required this.distance})
+    : super(key: key);
 
   @override
   _TurfDetailScreenState createState() => _TurfDetailScreenState();
@@ -35,9 +32,15 @@ class _TurfDetailScreenState extends State<TurfDetailScreen> {
     }
 
     final List<String> slots = [
-      '06:00 - 07:00', '07:00 - 08:00', '08:00 - 09:00',
-      '16:00 - 17:00', '17:00 - 18:00', '18:00 - 19:00',
-      '19:00 - 20:00', '20:00 - 21:00', '21:00 - 22:00',
+      '06:00 - 07:00',
+      '07:00 - 08:00',
+      '08:00 - 09:00',
+      '16:00 - 17:00',
+      '17:00 - 18:00',
+      '18:00 - 19:00',
+      '19:00 - 20:00',
+      '20:00 - 21:00',
+      '21:00 - 22:00',
     ];
 
     await showModalBottomSheet(
@@ -52,21 +55,28 @@ class _TurfDetailScreenState extends State<TurfDetailScreen> {
             return Padding(
               padding: EdgeInsets.only(
                 bottom: MediaQuery.of(context).viewInsets.bottom,
-                left: 20, right: 20, top: 20,
+                left: 20,
+                right: 20,
+                top: 20,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text('Book Turf', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                  Text(
+                    'Book Turf',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                  ),
                   SizedBox(height: 20),
-                  
+
                   // Game Selection
                   DropdownButtonFormField<String>(
                     value: selectedGame,
                     decoration: InputDecoration(
                       labelText: 'Select Game Type',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                     items: widget.turf.gamesAvailable.map((game) {
                       return DropdownMenuItem(value: game, child: Text(game));
@@ -77,13 +87,15 @@ class _TurfDetailScreenState extends State<TurfDetailScreen> {
 
                   // Date Selection
                   ListTile(
-                    title: Text(selectedDate != null 
-                        ? 'Date: ${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}' 
-                        : 'Select Date'),
+                    title: Text(
+                      selectedDate != null
+                          ? 'Date: ${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}'
+                          : 'Select Date',
+                    ),
                     trailing: Icon(Icons.calendar_today),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
-                      side: BorderSide(color: Colors.grey[300]!)
+                      side: BorderSide(color: Colors.grey[300]!),
                     ),
                     onTap: () async {
                       final picked = await showDatePicker(
@@ -104,7 +116,9 @@ class _TurfDetailScreenState extends State<TurfDetailScreen> {
                     value: selectedSlot,
                     decoration: InputDecoration(
                       labelText: 'Select Time Slot',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                     items: slots.map((slot) {
                       return DropdownMenuItem(value: slot, child: Text(slot));
@@ -115,9 +129,13 @@ class _TurfDetailScreenState extends State<TurfDetailScreen> {
 
                   ElevatedButton(
                     onPressed: () async {
-                      if (selectedGame == null || selectedDate == null || selectedSlot == null) {
+                      if (selectedGame == null ||
+                          selectedDate == null ||
+                          selectedSlot == null) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Please select game, date, and slot')),
+                          SnackBar(
+                            content: Text('Please select game, date, and slot'),
+                          ),
                         );
                         return;
                       }
@@ -125,7 +143,9 @@ class _TurfDetailScreenState extends State<TurfDetailScreen> {
                       final user = _authService.currentUser;
                       if (user == null) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('You must be logged in to book.')),
+                          SnackBar(
+                            content: Text('You must be logged in to book.'),
+                          ),
                         );
                         return;
                       }
@@ -134,6 +154,7 @@ class _TurfDetailScreenState extends State<TurfDetailScreen> {
                         final booking = BookingModel(
                           bookingId: Uuid().v4(),
                           turfId: widget.turf.turfId,
+                          turfOwnerId: widget.turf.ownerId,
                           playerId: user.uid,
                           gameType: selectedGame!,
                           bookingDate: selectedDate!,
@@ -147,7 +168,7 @@ class _TurfDetailScreenState extends State<TurfDetailScreen> {
                           SnackBar(content: Text('Booking confirmed!')),
                         );
                       } catch (e) {
-                         ScaffoldMessenger.of(context).showSnackBar(
+                        ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(content: Text('Failed to book: $e')),
                         );
                       }
@@ -155,15 +176,20 @@ class _TurfDetailScreenState extends State<TurfDetailScreen> {
                     style: ElevatedButton.styleFrom(
                       padding: EdgeInsets.symmetric(vertical: 15),
                       backgroundColor: AppTheme.theme.primaryColor,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
-                    child: Text('Confirm Booking', style: TextStyle(color: Colors.white, fontSize: 16)),
+                    child: Text(
+                      'Confirm Booking',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
                   ),
                   SizedBox(height: 20),
                 ],
               ),
             );
-          }
+          },
         );
       },
     );
@@ -186,10 +212,14 @@ class _TurfDetailScreenState extends State<TurfDetailScreen> {
               height: 200,
               color: Colors.grey[300],
               child: Center(
-                child: Icon(Icons.sports_soccer, size: 80, color: Colors.grey[500]),
+                child: Icon(
+                  Icons.sports_soccer,
+                  size: 80,
+                  color: Colors.grey[500],
+                ),
               ),
             ),
-            
+
             Padding(
               padding: EdgeInsets.all(20),
               child: Column(
@@ -202,11 +232,17 @@ class _TurfDetailScreenState extends State<TurfDetailScreen> {
                       Expanded(
                         child: Text(
                           widget.turf.name,
-                          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                       Container(
-                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.green[100],
                           borderRadius: BorderRadius.circular(20),
@@ -230,29 +266,40 @@ class _TurfDetailScreenState extends State<TurfDetailScreen> {
                       Expanded(
                         child: Text(
                           '${widget.turf.location} (${widget.distance.toStringAsFixed(1)} km away)',
-                          style: TextStyle(fontSize: 16, color: Colors.grey[700]),
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey[700],
+                          ),
                         ),
                       ),
                     ],
                   ),
-                  if (widget.turf.contact != null && widget.turf.contact!.isNotEmpty) ...[
+                  if (widget.turf.contact != null &&
+                      widget.turf.contact!.isNotEmpty) ...[
                     SizedBox(height: 10),
                     Row(
                       children: [
-                        Icon(Icons.phone, color: AppTheme.theme.primaryColor, size: 20),
+                        Icon(
+                          Icons.phone,
+                          color: AppTheme.theme.primaryColor,
+                          size: 20,
+                        ),
                         SizedBox(width: 8),
                         Text(
                           widget.turf.contact!,
-                          style: TextStyle(fontSize: 16, color: Colors.grey[700]),
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey[700],
+                          ),
                         ),
                       ],
                     ),
                   ],
-                  
+
                   SizedBox(height: 24),
                   Divider(),
                   SizedBox(height: 16),
-                  
+
                   Text(
                     'Available Games',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -264,14 +311,18 @@ class _TurfDetailScreenState extends State<TurfDetailScreen> {
                     children: widget.turf.gamesAvailable.map((game) {
                       int count = widget.turf.courts[game] ?? 1;
                       return Chip(
-                        avatar: Icon(Icons.sports, size: 16, color: Colors.white),
+                        avatar: Icon(
+                          Icons.sports,
+                          size: 16,
+                          color: Colors.white,
+                        ),
                         label: Text('$game ($count courts)'),
                         backgroundColor: AppTheme.theme.primaryColor,
                         labelStyle: TextStyle(color: Colors.white),
                       );
                     }).toList(),
                   ),
-                  
+
                   SizedBox(height: 24),
                   Text(
                     'Facilities',
@@ -279,14 +330,20 @@ class _TurfDetailScreenState extends State<TurfDetailScreen> {
                   ),
                   SizedBox(height: 12),
                   if (widget.turf.facilities.isEmpty)
-                    Text('No specific facilities listed.', style: TextStyle(color: Colors.grey))
+                    Text(
+                      'No specific facilities listed.',
+                      style: TextStyle(color: Colors.grey),
+                    )
                   else
                     Wrap(
                       spacing: 12,
                       runSpacing: 12,
                       children: widget.turf.facilities.map((facility) {
                         return Container(
-                          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
                           decoration: BoxDecoration(
                             border: Border.all(color: Colors.grey[300]!),
                             borderRadius: BorderRadius.circular(20),
@@ -294,7 +351,11 @@ class _TurfDetailScreenState extends State<TurfDetailScreen> {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.check_circle, size: 16, color: Colors.green),
+                              Icon(
+                                Icons.check_circle,
+                                size: 16,
+                                color: Colors.green,
+                              ),
                               SizedBox(width: 6),
                               Text(facility),
                             ],
@@ -302,7 +363,7 @@ class _TurfDetailScreenState extends State<TurfDetailScreen> {
                         );
                       }).toList(),
                     ),
-                  
+
                   SizedBox(height: 40),
                   SizedBox(
                     width: double.infinity,
@@ -317,7 +378,11 @@ class _TurfDetailScreenState extends State<TurfDetailScreen> {
                       ),
                       child: Text(
                         'Book Turf Time',
-                        style: TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 18,
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),

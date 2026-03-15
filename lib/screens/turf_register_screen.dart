@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import 'turf_profile_setup_screen.dart';
+import 'turf_auth_screen.dart';
 
 class TurfRegisterScreen extends StatefulWidget {
   @override
@@ -35,12 +36,13 @@ class _TurfRegisterScreenState extends State<TurfRegisterScreen> {
       );
 
       if (userCredential != null) {
-        Navigator.pushReplacement(
+        showMessage(
+          'Registration successful! Please check your email and verify your account before logging in.',
+        );
+        Navigator.pushAndRemoveUntil(
           context,
-          MaterialPageRoute(
-            builder: (_) =>
-                TurfProfileSetupScreen(ownerId: userCredential.user!.uid),
-          ),
+          MaterialPageRoute(builder: (_) => TurfLoginScreen()),
+          (route) => false,
         );
       }
     } catch (e) {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import 'player_home_screen.dart';
+import 'player_auth_screen.dart';
 
 class PlayerRegisterScreen extends StatefulWidget {
   @override
@@ -66,9 +67,12 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
       );
 
       if (userCredential != null) {
+        showMessage(
+          'Registration successful! Please check your email and verify your account before logging in.',
+        );
         Navigator.pushAndRemoveUntil(
           context,
-          MaterialPageRoute(builder: (_) => PlayerHomeScreen()),
+          MaterialPageRoute(builder: (_) => PlayerLoginScreen()),
           (route) => false,
         );
       }

@@ -1,6 +1,7 @@
 class BookingModel {
   final String bookingId;
   final String turfId;
+  final String turfOwnerId;
   final String playerId;
   final String? matchId; // Optional, if booked via match creation
   final String gameType;
@@ -12,6 +13,7 @@ class BookingModel {
   BookingModel({
     required this.bookingId,
     required this.turfId,
+    required this.turfOwnerId,
     required this.playerId,
     this.matchId,
     required this.gameType,
@@ -25,6 +27,7 @@ class BookingModel {
     return {
       'bookingId': bookingId,
       'turfId': turfId,
+      'turfOwnerId': turfOwnerId,
       'playerId': playerId,
       'matchId': matchId,
       'gameType': gameType,
@@ -39,6 +42,7 @@ class BookingModel {
     return BookingModel(
       bookingId: map['bookingId'] ?? '',
       turfId: map['turfId'] ?? '',
+      turfOwnerId: map['turfOwnerId'] ?? '',
       playerId: map['playerId'] ?? '',
       matchId: map['matchId'],
       gameType: map['gameType'] ?? '',

@@ -27,6 +27,9 @@ class AuthService {
           .createUserWithEmailAndPassword(email: email, password: password);
 
       if (userCredential.user != null) {
+        // Send email verification
+        await userCredential.user!.sendEmailVerification();
+
         // Create user document
         final userModel = UserModel(
           userId: userCredential.user!.uid,
@@ -77,6 +80,9 @@ class AuthService {
           .createUserWithEmailAndPassword(email: email, password: password);
 
       if (userCredential.user != null) {
+        // Send email verification
+        await userCredential.user!.sendEmailVerification();
+
         final userModel = UserModel(
           userId: userCredential.user!.uid,
           role: 'turfOwner',
@@ -118,6 +124,15 @@ class AuthService {
   // Logout
   Future<void> logout() async {
     await _auth.signOut();
+  }
+
+  // Forgot Password
+  Future<void> sendPasswordResetEmail(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+    } catch (e) {
+      throw Exception('Failed to send password reset email: $e');
+    }
   }
 
   // Get user data
