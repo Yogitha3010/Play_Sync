@@ -7,6 +7,9 @@ import 'my_matches_screen.dart';
 import 'player_profile_screen.dart';
 import 'achievements_screen.dart';
 import 'role_selection_screen.dart';
+import 'teams_screen.dart';
+import 'turfs_screen.dart';
+import 'available_matches_screen.dart';
 
 class PlayerHomeScreen extends StatefulWidget {
   @override
@@ -156,6 +159,38 @@ class PlayerHomeTab extends StatelessWidget {
                 SizedBox(width: 15),
                 Expanded(
                   child: _ActionCard(
+                    icon: Icons.map,
+                    title: 'Find Turfs',
+                    color: Colors.indigo,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => TurfsScreen()),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 15),
+            Row(
+              children: [
+                Expanded(
+                  child: _ActionCard(
+                    icon: Icons.event_available,
+                    title: 'Available Matches',
+                    color: Colors.redAccent,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => AvailableMatchesScreen()),
+                      );
+                    },
+                  ),
+                ),
+                SizedBox(width: 15),
+                Expanded(
+                  child: _ActionCard(
                     icon: Icons.add_circle,
                     title: 'Create Match',
                     color: Colors.green,
@@ -174,6 +209,20 @@ class PlayerHomeTab extends StatelessWidget {
               children: [
                 Expanded(
                   child: _ActionCard(
+                    icon: Icons.groups,
+                    title: 'Teams',
+                    color: Colors.teal,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => TeamsScreen()),
+                      );
+                    },
+                  ),
+                ),
+                SizedBox(width: 15),
+                Expanded(
+                  child: _ActionCard(
                     icon: Icons.sports_soccer,
                     title: 'My Matches',
                     color: Colors.orange,
@@ -185,7 +234,11 @@ class PlayerHomeTab extends StatelessWidget {
                     },
                   ),
                 ),
-                SizedBox(width: 15),
+              ],
+            ),
+            SizedBox(height: 15),
+            Row(
+              children: [
                 Expanded(
                   child: _ActionCard(
                     icon: Icons.emoji_events,
@@ -198,6 +251,10 @@ class PlayerHomeTab extends StatelessWidget {
                       );
                     },
                   ),
+                ),
+                SizedBox(width: 15),
+                Expanded(
+                  child: const SizedBox.shrink(),
                 ),
               ],
             ),

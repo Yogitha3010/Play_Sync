@@ -1,4 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../models/user_model.dart';
 import '../models/player_profile_model.dart';
 import 'firebase_service.dart';
@@ -21,10 +23,8 @@ class AuthService {
   }) async {
     try {
       // Create user in Firebase Auth
-      UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      UserCredential userCredential = await _auth
+          .createUserWithEmailAndPassword(email: email, password: password);
 
       if (userCredential.user != null) {
         // Create user document
@@ -73,10 +73,8 @@ class AuthService {
     String? phone,
   }) async {
     try {
-      UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      UserCredential userCredential = await _auth
+          .createUserWithEmailAndPassword(email: email, password: password);
 
       if (userCredential.user != null) {
         final userModel = UserModel(
@@ -137,8 +135,115 @@ class AuthService {
 
   // Update user profile completion status
   Future<void> updateProfileCompletion(String userId, bool completed) async {
-    await FirebaseService.usersCollection
-        .doc(userId)
-        .update({'profileCompleted': completed});
+    await FirebaseService.usersCollection.doc(userId).update({
+      'profileCompleted': completed,
+    });
+  }
+
+  // Google Sign In
+  Future<UserCredential?> signInWithGoogle() async {
+    try {
+      // For web, use the Firebase JS SDK popup flow for better compatibility.
+      if (kIsWeb) {
+        final provider = GoogleAuthProvider();
+        final userCredential = await _auth.signInWithPopup(provider);
+
+        if (userCredential.user != null) {
+          // Create user document if not exists
+          final doc = await FirebaseService.usersCollection
+              .doc(userCredential.user!.uid)
+              .get();
+
+          if (!doc.exists) {
+            final userModel = UserModel(
+              userId: userCredential.user!.uid,
+              role: 'player',
+              email: userCredential.user!.email ?? '',
+              name: userCredential.user!.displayName ?? 'Google User',
+              phone: userCredential.user!.phoneNumber,
+              createdAt: DateTime.now(),
+              profileCompleted: false,
+            );
+
+            await FirebaseService.usersCollection
+                .doc(userCredential.user!.uid)
+                .set(userModel.toMap());
+
+            final playerProfile = PlayerProfileModel(
+              userId: userCredential.user!.uid,
+              name: userCredential.user!.displayName ?? 'Google User',
+              skillLevel: 5.0,
+              gamesPlayed: 0,
+              rating: 0.0,
+              preferredSports: [],
+              lastUpdated: DateTime.now(),
+            );
+
+            await FirebaseService.playerProfilesCollection
+                .doc(userCredential.user!.uid)
+                .set(playerProfile.toMap());
+          }
+        }
+
+        return userCredential;
+      }
+
+      // Native platforms: use google_sign_in plugin.
+      // The v7+ api exposes a singleton and uses authenticate() instead of a constructor.
+      await GoogleSignIn.instance.initialize();
+      final GoogleSignInAccount googleUser = await GoogleSignIn.instance
+          .authenticate(scopeHint: ['email']);
+
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        idToken: googleAuth.idToken,
+      );
+
+      UserCredential userCredential = await _auth.signInWithCredential(
+        credential,
+      );
+
+      if (userCredential.user != null) {
+        // Check if user document already exists
+        final doc = await FirebaseService.usersCollection
+            .doc(userCredential.user!.uid)
+            .get();
+
+        if (!doc.exists) {
+          // New User via Google - Create standard player document
+          final userModel = UserModel(
+            userId: userCredential.user!.uid,
+            role: 'player', // Default to player for Google sign in
+            email: userCredential.user!.email ?? '',
+            name: userCredential.user!.displayName ?? 'Google User',
+            phone: userCredential.user!.phoneNumber,
+            createdAt: DateTime.now(),
+            profileCompleted: false,
+          );
+
+          await FirebaseService.usersCollection
+              .doc(userCredential.user!.uid)
+              .set(userModel.toMap());
+
+          // Create base profile
+          final playerProfile = PlayerProfileModel(
+            userId: userCredential.user!.uid,
+            name: userCredential.user!.displayName ?? 'Google User',
+            skillLevel: 5.0,
+            gamesPlayed: 0,
+            rating: 0.0,
+            preferredSports: [],
+            lastUpdated: DateTime.now(),
+          );
+
+          await FirebaseService.playerProfilesCollection
+              .doc(userCredential.user!.uid)
+              .set(playerProfile.toMap());
+        }
+      }
+      return userCredential;
+    } catch (e) {
+      throw Exception('Google Sign-In failed: $e');
+    }
   }
 }

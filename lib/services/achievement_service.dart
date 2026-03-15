@@ -179,4 +179,53 @@ class AchievementService {
       print('Error incrementing games played: $e');
     }
   }
+
+  // Record Match Result
+  Future<void> recordMatchResult({required String playerId, required bool won}) async {
+    try {
+      final profile = await _firestoreService.getPlayerProfile(playerId);
+      if (profile == null) return;
+
+      int newGamesPlayed = profile.gamesPlayed + 1;
+      int newWins = profile.totalWins + (won ? 1 : 0);
+      int newLosses = profile.totalLosses + (won ? 0 : 1);
+
+      await _firestoreService.updatePlayerProfile(playerId, {
+        'gamesPlayed': newGamesPlayed,
+        'totalWins': newWins,
+        'totalLosses': newLosses,
+      });
+
+      // Check for new achievements after incrementing
+      await checkAndAwardAchievements(playerId);
+
+      // Extra achievement for wins (10 wins)
+      if (newWins >= 10) {
+        final existingAchievements = await _firestoreService.getPlayerAchievements(playerId);
+        final existingBadgeNames = existingAchievements.map((a) => a.badgeName).toSet();
+        if (!existingBadgeNames.contains('Decisive Winner')) {
+          final achievement = AchievementModel(
+            achievementId: _uuid.v4(),
+            playerId: playerId,
+            badgeName: 'Decisive Winner',
+            description: 'Won 10 matches',
+            icon: '🌟',
+            unlockedAt: DateTime.now(),
+            category: 'wins',
+          );
+          await _firestoreService.createAchievement(achievement);
+          
+          final updatedAchievements = [
+            ...profile.achievements,
+            'Decisive Winner',
+          ];
+          await _firestoreService.updatePlayerProfile(playerId, {
+             'achievements': updatedAchievements,
+          });
+        }
+      }
+    } catch (e) {
+      print('Error recording match result: $e');
+    }
+  }
 }

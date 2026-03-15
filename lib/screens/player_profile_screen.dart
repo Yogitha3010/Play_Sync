@@ -30,16 +30,18 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
       final currentUser = _authService.currentUser;
       if (currentUser == null) return;
 
-      final profileData = await _firestoreService.getPlayerProfile(currentUser.uid);
+      final profileData = await _firestoreService.getPlayerProfile(
+        currentUser.uid,
+      );
       setState(() {
         profile = profileData;
         isLoading = false;
       });
     } catch (e) {
       setState(() => isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading profile: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error loading profile: $e')));
     }
   }
 
@@ -106,25 +108,13 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
             SizedBox(height: 15),
             Text(
               profile!.name ?? 'Unknown Player',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 30),
 
             // Stats Cards
             Row(
               children: [
-                Expanded(
-                  child: _StatCard(
-                    title: 'Skill Level',
-                    value: profile!.skillLevel.toStringAsFixed(1),
-                    icon: Icons.star,
-                    color: Colors.amber,
-                  ),
-                ),
-                SizedBox(width: 15),
                 Expanded(
                   child: _StatCard(
                     title: 'Rating',
@@ -151,8 +141,30 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
                   child: _StatCard(
                     title: 'Achievements',
                     value: profile!.achievements.length.toString(),
-                    icon: Icons.emoji_events,
+                    icon: Icons.star,
                     color: Colors.purple,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 15),
+            Row(
+              children: [
+                Expanded(
+                  child: _StatCard(
+                    title: 'Wins',
+                    value: profile!.totalWins.toString(),
+                    icon: Icons.emoji_events,
+                    color: Colors.orange,
+                  ),
+                ),
+                SizedBox(width: 15),
+                Expanded(
+                  child: _StatCard(
+                    title: 'Win %',
+                    value: '${profile!.winPercentage.toStringAsFixed(1)}%',
+                    icon: Icons.pie_chart,
+                    color: Colors.teal,
                   ),
                 ),
               ],
@@ -180,7 +192,8 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
                       children: profile!.preferredSports.map((sport) {
                         return Chip(
                           label: Text(sport),
-                          backgroundColor: AppTheme.theme.colorScheme.primary.withOpacity(0.2),
+                          backgroundColor: AppTheme.theme.colorScheme.primary
+                              .withOpacity(0.2),
                         );
                       }).toList(),
                     ),
@@ -194,7 +207,10 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
             if (profile!.locationAddress != null)
               Card(
                 child: ListTile(
-                  leading: Icon(Icons.location_on, color: AppTheme.theme.colorScheme.primary),
+                  leading: Icon(
+                    Icons.location_on,
+                    color: AppTheme.theme.colorScheme.primary,
+                  ),
                   title: Text('Location'),
                   subtitle: Text(profile!.locationAddress!),
                 ),
@@ -223,9 +239,7 @@ class _StatCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       elevation: 3,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(15),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
       child: Padding(
         padding: EdgeInsets.all(20),
         child: Column(
@@ -234,18 +248,12 @@ class _StatCard extends StatelessWidget {
             SizedBox(height: 10),
             Text(
               value,
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 5),
             Text(
               title,
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             ),
           ],
         ),

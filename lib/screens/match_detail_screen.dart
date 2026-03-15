@@ -5,8 +5,13 @@ import '../services/auth_service.dart';
 import '../services/matchmaking_service.dart';
 import '../models/match_model.dart';
 import '../models/player_profile_model.dart';
+import '../models/player_profile_model.dart';
 import '../theme/app_theme.dart';
 import 'feedback_screen.dart';
+import '../services/achievement_service.dart';
+import 'package:geolocator/geolocator.dart';
+import 'chat_screen.dart';
+import 'turf_detail_screen.dart';
 
 class MatchDetailScreen extends StatefulWidget {
   final String matchId;
@@ -27,6 +32,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
   final MatchmakingService _matchmakingService = MatchmakingService();
+  final AchievementService _achievementService = AchievementService();
 
   @override
   void initState() {
@@ -135,6 +141,30 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
     }
   }
 
+  Future<void> _leaveMatch() async {
+    try {
+      final currentUser = _authService.currentUser;
+      if (currentUser == null || match == null) return;
+
+      if (!match!.players.contains(currentUser.uid)) {
+        return;
+      }
+
+      List<String> updatedPlayers = List.from(match!.players);
+      updatedPlayers.remove(currentUser.uid);
+
+      await _firestoreService.updateMatch(widget.matchId, {
+        'players': updatedPlayers,
+      });
+
+      _loadMatch();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error leaving match: $e')),
+      );
+    }
+  }
+
   Future<void> _formTeams() async {
     if (match == null || playerProfiles.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -183,6 +213,96 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
     }
   }
 
+  Future<void> _showCompleteMatchDialog() async {
+    final teamAScoreCtrl = TextEditingController();
+    final teamBScoreCtrl = TextEditingController();
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('End Match - Enter Score'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: teamAScoreCtrl,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(labelText: 'Team A Score'),
+            ),
+            TextField(
+              controller: teamBScoreCtrl,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(labelText: 'Team B Score'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _completeMatch(
+                int.tryParse(teamAScoreCtrl.text) ?? 0,
+                int.tryParse(teamBScoreCtrl.text) ?? 0,
+              );
+            },
+            child: Text('Submit'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _completeMatch(int scoreA, int scoreB) async {
+    if (match == null) return;
+    setState(() => isLoading = true);
+
+    try {
+      // Update the match in Firestore
+      await _firestoreService.updateMatch(widget.matchId, {
+        'matchStatus': 'completed',
+        'score': {
+          'teamA': scoreA,
+          'teamB': scoreB,
+        }
+      });
+
+      // Update player win/loss statistics
+      String winner = '';
+      if (scoreA > scoreB) winner = 'teamA';
+      else if (scoreB > scoreA) winner = 'teamB';
+      else winner = 'tie';
+
+      for (String playerId in match!.teamA) {
+        if (winner == 'tie') {
+          await _achievementService.incrementGamesPlayed(playerId);
+        } else {
+          await _achievementService.recordMatchResult(playerId: playerId, won: winner == 'teamA');
+        }
+      }
+
+      for (String playerId in match!.teamB) {
+        if (winner == 'tie') {
+          await _achievementService.incrementGamesPlayed(playerId);
+        } else {
+          await _achievementService.recordMatchResult(playerId: playerId, won: winner == 'teamB');
+        }
+      }
+
+      _loadMatch();
+    } catch (e) {
+      if (mounted) {
+        setState(() => isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error ending match: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (isLoading || match == null) {
@@ -206,6 +326,21 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
         backgroundColor: AppTheme.theme.primaryColor,
         foregroundColor: Colors.white,
         actions: [
+          if (isPlayer || isCreator)
+            IconButton(
+              icon: Icon(Icons.chat),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ChatScreen(
+                      chatRoomId: match!.matchId,
+                      chatTitle: 'Match Chat',
+                    ),
+                  ),
+                );
+              },
+            ),
           if (match!.matchStatus == 'completed' && isPlayer)
             IconButton(
               icon: Icon(Icons.feedback),
@@ -263,7 +398,37 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                       ],
                     ),
                     SizedBox(height: 15),
-                    _InfoRow(Icons.location_on, match!.location),
+                    if (match!.turfId != null)
+                      InkWell(
+                        onTap: () async {
+                          final turfData = await _firestoreService.getTurf(match!.turfId!);
+                          if (turfData != null && mounted) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => TurfDetailScreen(turf: turfData, distance: 0.0), // distance can be re-calculated if needed
+                              ),
+                            );
+                          }
+                        },
+                        child: Padding(
+                           padding: EdgeInsets.symmetric(vertical: 8),
+                           child: Row(
+                             children: [
+                               Icon(Icons.location_on, size: 20, color: AppTheme.theme.primaryColor),
+                               SizedBox(width: 10),
+                               Expanded(
+                                  child: Text(
+                                    match!.location, 
+                                    style: TextStyle(color: AppTheme.theme.primaryColor, decoration: TextDecoration.underline),
+                                  ),
+                               ),
+                             ],
+                           )
+                        ),
+                      )
+                    else
+                      _InfoRow(Icons.location_on, match!.location),
                     if (match!.scheduledTime != null)
                       _InfoRow(
                         Icons.calendar_today,
@@ -294,6 +459,27 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                     Icon(Icons.person_add),
                     SizedBox(width: 10),
                     Text('Join Match', style: TextStyle(fontSize: 16)),
+                  ],
+                ),
+              ),
+
+            if (isPlayer && !isCreator && match!.matchStatus == 'pending')
+              ElevatedButton(
+                onPressed: _leaveMatch,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red[400],
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(vertical: 15),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.exit_to_app),
+                    SizedBox(width: 10),
+                    Text('Leave Match', style: TextStyle(fontSize: 16)),
                   ],
                 ),
               ),
@@ -377,6 +563,31 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                   ),
                 ),
 
+              // Complete Match Button
+              if (isCreator && match!.matchStatus == 'active')
+                Padding(
+                  padding: EdgeInsets.only(top: 20),
+                  child: ElevatedButton(
+                    onPressed: _showCompleteMatchDialog,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                      padding: EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.stop_circle),
+                        SizedBox(width: 10),
+                        Text('End Match & Log Score', style: TextStyle(fontSize: 16)),
+                      ],
+                    ),
+                  ),
+                ),
+
               if (match!.tossResult != null) ...[
                 SizedBox(height: 20),
                 Card(
@@ -396,6 +607,43 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                         Text(
                           '${match!.tossResult!['winner'] == 'teamA' ? 'Team A' : 'Team B'} won the toss and chose to ${match!.tossResult!['choice']}',
                           style: TextStyle(fontSize: 16),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+
+              // Score Section
+              if (match!.score != null) ...[
+                SizedBox(height: 20),
+                Card(
+                  color: Colors.green.withOpacity(0.2),
+                  child: Padding(
+                    padding: EdgeInsets.all(15),
+                    child: Column(
+                      children: [
+                        Text(
+                          'Final Score',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(height: 10),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            Text(
+                              'Team A: ${match!.score!['teamA']}',
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue[800]),
+                            ),
+                            Text('-', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                            Text(
+                              'Team B: ${match!.score!['teamB']}',
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red[800]),
+                            ),
+                          ],
                         ),
                       ],
                     ),

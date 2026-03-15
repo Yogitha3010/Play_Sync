@@ -4,6 +4,8 @@ import '../models/turf_model.dart';
 import '../models/match_model.dart';
 import '../models/feedback_model.dart';
 import '../models/achievement_model.dart';
+import '../models/team_model.dart';
+import '../models/booking_model.dart';
 import 'firebase_service.dart';
 
 class FirestoreService {
@@ -176,6 +178,67 @@ class FirestoreService {
     return querySnapshot.docs
         .map((doc) =>
             AchievementModel.fromMap(doc.data() as Map<String, dynamic>))
+        .toList();
+  }
+
+  // Team Operations
+  Future<void> createTeam(TeamModel team) async {
+    await FirebaseService.teamsCollection.doc(team.teamId).set(team.toMap());
+  }
+
+  Future<TeamModel?> getTeam(String teamId) async {
+    final doc = await FirebaseService.teamsCollection.doc(teamId).get();
+    if (doc.exists) {
+      return TeamModel.fromMap(doc.data() as Map<String, dynamic>);
+    }
+    return null;
+  }
+
+  Stream<List<TeamModel>> getTeamsStream() {
+    return FirebaseService.teamsCollection
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => TeamModel.fromMap(doc.data() as Map<String, dynamic>))
+            .toList());
+  }
+
+  Future<void> joinTeam(String teamId, String playerId) async {
+    await FirebaseService.teamsCollection.doc(teamId).update({
+      'players': FieldValue.arrayUnion([playerId])
+    });
+  }
+
+  Future<void> leaveTeam(String teamId, String playerId) async {
+    await FirebaseService.teamsCollection.doc(teamId).update({
+      'players': FieldValue.arrayRemove([playerId])
+    });
+  }
+
+  // Booking Operations
+  Future<void> createBooking(BookingModel booking) async {
+    await FirebaseService.bookingsCollection
+        .doc(booking.bookingId)
+        .set(booking.toMap());
+  }
+
+  Future<List<BookingModel>> getTurfBookings(String turfId) async {
+    final querySnapshot = await FirebaseService.bookingsCollection
+        .where('turfId', isEqualTo: turfId)
+        .orderBy('bookingDate', descending: true)
+        .get();
+    return querySnapshot.docs
+        .map((doc) => BookingModel.fromMap(doc.data() as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<BookingModel>> getPlayerBookings(String playerId) async {
+    final querySnapshot = await FirebaseService.bookingsCollection
+        .where('playerId', isEqualTo: playerId)
+        .orderBy('bookingDate', descending: true)
+        .get();
+    return querySnapshot.docs
+        .map((doc) => BookingModel.fromMap(doc.data() as Map<String, dynamic>))
         .toList();
   }
 }

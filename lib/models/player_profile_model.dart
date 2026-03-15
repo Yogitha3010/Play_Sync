@@ -3,6 +3,8 @@ class PlayerProfileModel {
   final String? name;
   final double skillLevel; // 0.0 to 10.0
   final int gamesPlayed;
+  final int totalWins;
+  final int totalLosses;
   final double rating; // Average rating from feedback
   final List<String> preferredSports;
   final Map<String, double> location; // {latitude, longitude}
@@ -16,6 +18,8 @@ class PlayerProfileModel {
     this.name,
     this.skillLevel = 5.0,
     this.gamesPlayed = 0,
+    this.totalWins = 0,
+    this.totalLosses = 0,
     this.rating = 0.0,
     this.preferredSports = const [],
     this.location = const {},
@@ -31,6 +35,8 @@ class PlayerProfileModel {
       'name': name,
       'skillLevel': skillLevel,
       'gamesPlayed': gamesPlayed,
+      'totalWins': totalWins,
+      'totalLosses': totalLosses,
       'rating': rating,
       'preferredSports': preferredSports,
       'location': location,
@@ -47,6 +53,8 @@ class PlayerProfileModel {
       name: map['name'],
       skillLevel: (map['skillLevel'] ?? 5.0).toDouble(),
       gamesPlayed: map['gamesPlayed'] ?? 0,
+      totalWins: map['totalWins'] ?? 0,
+      totalLosses: map['totalLosses'] ?? 0,
       rating: (map['rating'] ?? 0.0).toDouble(),
       preferredSports: List<String>.from(map['preferredSports'] ?? []),
       location: Map<String, double>.from(map['location'] ?? {}),
@@ -64,6 +72,8 @@ class PlayerProfileModel {
     String? name,
     double? skillLevel,
     int? gamesPlayed,
+    int? totalWins,
+    int? totalLosses,
     double? rating,
     List<String>? preferredSports,
     Map<String, double>? location,
@@ -77,6 +87,8 @@ class PlayerProfileModel {
       name: name ?? this.name,
       skillLevel: skillLevel ?? this.skillLevel,
       gamesPlayed: gamesPlayed ?? this.gamesPlayed,
+      totalWins: totalWins ?? this.totalWins,
+      totalLosses: totalLosses ?? this.totalLosses,
       rating: rating ?? this.rating,
       preferredSports: preferredSports ?? this.preferredSports,
       location: location ?? this.location,
@@ -85,5 +97,10 @@ class PlayerProfileModel {
       matchHistory: matchHistory ?? this.matchHistory,
       lastUpdated: lastUpdated ?? this.lastUpdated,
     );
+  }
+
+  double get winPercentage {
+    if (gamesPlayed == 0) return 0.0;
+    return (totalWins / gamesPlayed) * 100.0;
   }
 }

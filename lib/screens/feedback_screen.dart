@@ -90,21 +90,9 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
         await _firestoreService.createFeedback(feedback);
       }
 
-      // Update match status to completed
-      if (match != null) {
-        await _firestoreService.updateMatch(widget.matchId, {
-          'matchStatus': 'completed',
-        });
-      }
-
       // Update ratings for all players who received feedback
       for (String playerId in ratings.keys) {
         await _achievementService.updatePlayerRating(playerId);
-      }
-
-      // Increment games played for current user
-      if (currentUser != null) {
-        await _achievementService.incrementGamesPlayed(currentUser.uid);
       }
 
       ScaffoldMessenger.of(context).showSnackBar(

@@ -55,6 +55,32 @@ class _PlayerLoginScreenState extends State<PlayerLoginScreen> {
     );
   }
 
+  Future<void> _handleGoogleSignIn() async {
+    setState(() {
+      isLoading = true;
+    });
+
+    try {
+      final userCredential = await _authService.signInWithGoogle();
+      if (userCredential != null) {
+        if (mounted) {
+           Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => PlayerHomeScreen()),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) showMessage('Google Sign-In failed: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
+  }
+
   @override
   void dispose() {
     emailController.dispose();
@@ -168,6 +194,32 @@ class _PlayerLoginScreenState extends State<PlayerLoginScreen> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
+                ),
+
+                SizedBox(height: 15),
+
+                /// Google Sign In Button
+                OutlinedButton.icon(
+                  onPressed: isLoading ? null : _handleGoogleSignIn,
+                  icon: isLoading
+                      ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(Icons.g_mobiledata, size: 30, color: Colors.red),
+                  label: Text('Continue with Google',
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87)),
+                  style: OutlinedButton.styleFrom(
+                    padding: EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    side: BorderSide(color: Colors.grey[400]!),
+                  ),
                 ),
 
                 SizedBox(height: 25),

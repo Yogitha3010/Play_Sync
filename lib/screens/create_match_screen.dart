@@ -5,6 +5,7 @@ import '../services/auth_service.dart';
 import '../services/matchmaking_service.dart';
 import '../models/match_model.dart';
 import '../models/player_profile_model.dart';
+import '../models/turf_model.dart';
 import '../theme/app_theme.dart';
 import 'match_detail_screen.dart';
 
@@ -17,10 +18,12 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
   bool isLoading = false;
 
   final _formKey = GlobalKey<FormState>();
-  final locationController = TextEditingController();
   final maxPlayersController = TextEditingController(text: '10');
 
   String selectedGame = 'Cricket';
+  TurfModel? selectedTurf;
+  List<TurfModel> availableTurfs = [];
+  
   DateTime? scheduledTime;
   int maxPlayers = 10;
 
@@ -28,14 +31,37 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
 
+  @override
+  void initState() {
+    super.initState();
+    _loadTurfsForGame(selectedGame);
+  }
+
+  Future<void> _loadTurfsForGame(String gameType) async {
+    setState(() => isLoading = true);
+    try {
+      final turfs = await _firestoreService.searchTurfs(gameType: gameType);
+      setState(() {
+        availableTurfs = turfs;
+        selectedTurf = turfs.isNotEmpty ? turfs.first : null;
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load turfs: $e')),
+      );
+    } finally {
+      setState(() => isLoading = false);
+    }
+  }
+
   Future<void> _createMatch() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    if (locationController.text.isEmpty) {
+    if (selectedTurf == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please enter a location')),
+        SnackBar(content: Text('Please select a Turf location')),
       );
       return;
     }
@@ -50,7 +76,8 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
       final match = MatchModel(
         matchId: matchId,
         gameType: selectedGame,
-        location: locationController.text.trim(),
+        location: selectedTurf!.name, // Fallback location description
+        turfId: selectedTurf!.turfId, // Native turf tracking
         createdBy: currentUser.uid,
         players: [currentUser.uid],
         matchStatus: 'pending',
@@ -110,7 +137,6 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
 
   @override
   void dispose() {
-    locationController.dispose();
     maxPlayersController.dispose();
     super.dispose();
   }
@@ -166,28 +192,41 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
                 }).toList(),
                 onChanged: (value) {
                   if (value != null) {
-                    setState(() => selectedGame = value);
+                    setState(() {
+                       selectedGame = value;
+                       selectedTurf = null;
+                    });
+                    _loadTurfsForGame(value);
                   }
                 },
               ),
               SizedBox(height: 20),
 
-              // Location
-              TextFormField(
-                controller: locationController,
+              // Location / Turf Selection
+              Text(
+                'Select Turf Location *',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 10),
+              DropdownButtonFormField<TurfModel>(
+                value: selectedTurf,
                 decoration: InputDecoration(
-                  labelText: 'Location *',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                   prefixIcon: Icon(Icons.location_on),
+                  hintText: availableTurfs.isEmpty ? 'No turfs available for this sport' : 'Select a Turf',
                 ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Location is required';
-                  }
-                  return null;
+                items: availableTurfs.map((turf) {
+                  return DropdownMenuItem(
+                    value: turf,
+                    child: Text('${turf.name} - ${turf.location}'),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  setState(() => selectedTurf = value);
                 },
+                validator: (value) => value == null ? 'Please select a Turf location' : null,
               ),
               SizedBox(height: 20),
 

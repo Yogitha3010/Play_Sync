@@ -3,7 +3,8 @@ class TurfModel {
   final String ownerId;
   final String name;
   final String location;
-  final Map<String, double> coordinates; // {latitude, longitude}
+  final double latitude;
+  final double longitude;
   final List<String> gamesAvailable;
   final Map<String, int> courts; // {gameType: numberOfCourts}
   final double pricePerHour;
@@ -17,7 +18,8 @@ class TurfModel {
     required this.ownerId,
     required this.name,
     required this.location,
-    this.coordinates = const {},
+    this.latitude = 0.0,
+    this.longitude = 0.0,
     this.gamesAvailable = const [],
     this.courts = const {},
     this.pricePerHour = 0.0,
@@ -27,14 +29,27 @@ class TurfModel {
     this.isActive = true,
   });
 
+  /// Returns a map of latitude and longitude for compatibility with older code.
+  Map<String, double> get coordinates => {
+    'latitude': latitude,
+    'longitude': longitude,
+  };
+
+  /// Alias for backwards compatibility / expected model shape.
+  List<String> get gameTypes => gamesAvailable;
+
   Map<String, dynamic> toMap() {
     return {
       'turfId': turfId,
       'ownerId': ownerId,
       'name': name,
+      'turfName': name,
       'location': location,
+      'latitude': latitude,
+      'longitude': longitude,
       'coordinates': coordinates,
       'gamesAvailable': gamesAvailable,
+      'gameTypes': gamesAvailable,
       'courts': courts,
       'pricePerHour': pricePerHour,
       'facilities': facilities,
@@ -45,13 +60,18 @@ class TurfModel {
   }
 
   factory TurfModel.fromMap(Map<String, dynamic> map) {
+    final coords = map['coordinates'];
+
     return TurfModel(
       turfId: map['turfId'] ?? '',
       ownerId: map['ownerId'] ?? '',
-      name: map['name'] ?? '',
+      name: map['name'] ?? map['turfName'] ?? '',
       location: map['location'] ?? '',
-      coordinates: Map<String, double>.from(map['coordinates'] ?? {}),
-      gamesAvailable: List<String>.from(map['gamesAvailable'] ?? []),
+      latitude: (map['latitude'] ?? coords?['latitude'] ?? 0.0).toDouble(),
+      longitude: (map['longitude'] ?? coords?['longitude'] ?? 0.0).toDouble(),
+      gamesAvailable: List<String>.from(
+        map['gamesAvailable'] ?? map['gameTypes'] ?? [],
+      ),
       courts: Map<String, int>.from(map['courts'] ?? {}),
       pricePerHour: (map['pricePerHour'] ?? 0.0).toDouble(),
       facilities: List<String>.from(map['facilities'] ?? []),

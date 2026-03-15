@@ -3,6 +3,7 @@ import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import 'my_turfs_screen.dart';
 import 'role_selection_screen.dart';
+import 'turf_owner_bookings_screen.dart';
 
 class TurfHomeScreen extends StatelessWidget {
   @override
@@ -125,29 +126,52 @@ class TurfHomeScreen extends StatelessWidget {
               ),
             ),
             SizedBox(height: 15),
-            Container(
-              padding: EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: Column(
-                children: [
-                  Icon(Icons.calendar_today, size: 48, color: Colors.grey),
-                  SizedBox(height: 10),
-                  Text(
-                    'Bookings',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
+            GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => TurfOwnerBookingsScreen()),
+                );
+              },
+              child: Container(
+                padding: EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(15),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 10,
+                      offset: Offset(0, 5),
                     ),
-                  ),
-                  SizedBox(height: 5),
-                  Text(
-                    'View match bookings for your turfs',
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-                ],
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.calendar_today, size: 40, color: Colors.orange),
+                    SizedBox(width: 20),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Bookings',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                          ),
+                          SizedBox(height: 5),
+                          Text(
+                            'View match bookings for your turfs',
+                            style: TextStyle(color: Colors.grey[600]),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(Icons.arrow_forward_ios),
+                  ],
+                ),
               ),
             ),
           ],
