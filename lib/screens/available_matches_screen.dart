@@ -27,19 +27,39 @@ class _AvailableMatchesScreenState extends State<AvailableMatchesScreen> {
 
     try {
       final currentUser = _authService.currentUser;
-      if (currentUser == null) return;
+      if (currentUser == null) {
+        if (!mounted) return;
+        setState(() {
+          availableMatches = [];
+          isLoading = false;
+        });
+        return;
+      }
 
-      // Fetch all pending matches
       final pendingMatches = await _firestoreService.getMatchesByStatus('pending');
-      
-      // Filter out matches the user is already a part of
-      final filtedMatches = pendingMatches.where((m) => !m.players.contains(currentUser.uid)).toList();
 
+      final now = DateTime.now();
+      final filteredMatches = pendingMatches.where((match) {
+        final isAlreadyJoined = match.players.contains(currentUser.uid);
+        final isFull = match.players.length >= match.maxPlayers;
+        final isExpired =
+            match.scheduledTime != null && !match.scheduledTime!.isAfter(now);
+
+        return !isAlreadyJoined && !isFull && !isExpired;
+      }).toList()
+        ..sort((a, b) {
+          final aTime = a.scheduledTime ?? a.createdAt;
+          final bTime = b.scheduledTime ?? b.createdAt;
+          return aTime.compareTo(bTime);
+        });
+
+      if (!mounted) return;
       setState(() {
-        availableMatches = filtedMatches;
+        availableMatches = filteredMatches;
         isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() => isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error loading matches: $e')),
@@ -168,7 +188,7 @@ class _AvailableMatchesScreenState extends State<AvailableMatchesScreen> {
                         Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
                         SizedBox(width: 4),
                         Text(
-                          '${match.scheduledTime!.day}/${match.scheduledTime!.month} ${match.scheduledTime!.hour}:${match.scheduledTime!.minute.toString().padLeft(2, '0')}',
+                          _formatScheduledTime(match.scheduledTime!),
                           style: TextStyle(color: Colors.grey[800]),
                         ),
                       ],
@@ -180,5 +200,14 @@ class _AvailableMatchesScreenState extends State<AvailableMatchesScreen> {
         ),
       ),
     );
+  }
+
+  String _formatScheduledTime(DateTime scheduledTime) {
+    final day = scheduledTime.day.toString().padLeft(2, '0');
+    final month = scheduledTime.month.toString().padLeft(2, '0');
+    final year = scheduledTime.year.toString();
+    final hour = scheduledTime.hour.toString().padLeft(2, '0');
+    final minute = scheduledTime.minute.toString().padLeft(2, '0');
+    return '$day/$month/$year $hour:$minute';
   }
 }
