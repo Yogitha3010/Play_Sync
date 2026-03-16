@@ -14,6 +14,7 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
   final _formKey = GlobalKey<FormState>();
   final _teamNameController = TextEditingController();
   String _selectedSport = 'Football';
+  String _teamVisibility = 'public';
   bool _isLoading = false;
 
   final List<String> _sportsList = [
@@ -55,6 +56,7 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
         teamName: _teamNameController.text.trim(),
         createdBy: user.uid,
         players: [user.uid], // Creator is automatically part of the team
+        visibility: _teamVisibility,
         gameType: _selectedSport,
         createdAt: DateTime.now(),
       );
@@ -144,6 +146,52 @@ class _CreateTeamScreenState extends State<CreateTeamScreen> {
                     });
                   }
                 },
+              ),
+              SizedBox(height: 20),
+              Text(
+                'Team Access',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              SizedBox(height: 10),
+              Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    RadioListTile<String>(
+                      value: 'public',
+                      groupValue: _teamVisibility,
+                      title: Text('Public'),
+                      subtitle: Text('Anyone can join this team instantly.'),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() {
+                            _teamVisibility = value;
+                          });
+                        }
+                      },
+                    ),
+                    Divider(height: 1),
+                    RadioListTile<String>(
+                      value: 'private',
+                      groupValue: _teamVisibility,
+                      title: Text('Private'),
+                      subtitle: Text('Players must send a request and wait for admin approval.'),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() {
+                            _teamVisibility = value;
+                          });
+                        }
+                      },
+                    ),
+                  ],
+                ),
               ),
               SizedBox(height: 40),
               ElevatedButton(

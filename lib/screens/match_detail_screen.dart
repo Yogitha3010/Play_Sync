@@ -5,13 +5,13 @@ import '../services/auth_service.dart';
 import '../services/matchmaking_service.dart';
 import '../models/match_model.dart';
 import '../models/player_profile_model.dart';
-import '../models/player_profile_model.dart';
 import '../theme/app_theme.dart';
 import 'feedback_screen.dart';
 import '../services/achievement_service.dart';
 import 'package:geolocator/geolocator.dart';
 import 'chat_screen.dart';
 import 'turf_detail_screen.dart';
+import '../models/team_model.dart';
 
 class MatchDetailScreen extends StatefulWidget {
   final String matchId;
@@ -28,6 +28,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
   List<PlayerProfileModel> playerProfiles = [];
   Map<String, List<String>> teams = {'teamA': [], 'teamB': []};
   Map<String, dynamic>? prediction;
+  TeamModel? linkedTeam;
 
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
@@ -57,6 +58,12 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
           'teamB': List.from(matchData.teamB),
         };
       });
+
+      if (matchData.teamId != null && matchData.teamId!.isNotEmpty) {
+        linkedTeam = await _firestoreService.getTeam(matchData.teamId!);
+      } else {
+        linkedTeam = null;
+      }
 
       // Load player profiles
       await _loadPlayerProfiles();
@@ -124,6 +131,19 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
           SnackBar(content: Text('Match is full')),
         );
         return;
+      }
+
+      if (match!.visibility == 'team') {
+        final userTeams = await _firestoreService.getTeamsForPlayer(currentUser.uid);
+        final isAllowed = match!.teamId != null &&
+            userTeams.any((team) => team.teamId == match!.teamId);
+
+        if (!isAllowed) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Only team members can join this match')),
+          );
+          return;
+        }
       }
 
       List<String> updatedPlayers = List.from(match!.players);
@@ -433,6 +453,13 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                       _InfoRow(
                         Icons.calendar_today,
                         '${match!.scheduledTime!.day}/${match!.scheduledTime!.month}/${match!.scheduledTime!.year} ${match!.scheduledTime!.hour}:${match!.scheduledTime!.minute.toString().padLeft(2, '0')}',
+                      ),
+                    if (match!.visibility == 'team')
+                      _InfoRow(
+                        Icons.groups,
+                        linkedTeam != null
+                            ? 'Visible only to ${linkedTeam!.teamName} members'
+                            : 'Visible only to team members',
                       ),
                     _InfoRow(Icons.people, '${match!.players.length}/${match!.maxPlayers} players'),
                   ],

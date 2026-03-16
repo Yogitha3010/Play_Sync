@@ -112,6 +112,18 @@ class _TeamsScreenState extends State<TeamsScreen> {
               SizedBox(height: 4),
               Row(
                 children: [
+                  Icon(
+                    team.visibility == 'private' ? Icons.lock : Icons.public,
+                    size: 16,
+                    color: Colors.grey[600],
+                  ),
+                  SizedBox(width: 4),
+                  Text(team.visibility == 'private' ? 'Private Team' : 'Public Team'),
+                ],
+              ),
+              SizedBox(height: 4),
+              Row(
+                children: [
                   Icon(Icons.people, size: 16, color: Colors.grey[600]),
                   SizedBox(width: 4),
                   Text('${team.players.length} Players'),

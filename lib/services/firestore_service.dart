@@ -219,15 +219,47 @@ class FirestoreService {
         );
   }
 
+  Future<List<TeamModel>> getTeamsForPlayer(String playerId) async {
+    final querySnapshot = await FirebaseService.teamsCollection
+        .where('players', arrayContains: playerId)
+        .get();
+    return querySnapshot.docs
+        .map(
+          (doc) => TeamModel.fromMap(doc.data() as Map<String, dynamic>),
+        )
+        .toList();
+  }
+
   Future<void> joinTeam(String teamId, String playerId) async {
     await FirebaseService.teamsCollection.doc(teamId).update({
       'players': FieldValue.arrayUnion([playerId]),
+      'joinRequests': FieldValue.arrayRemove([playerId]),
+    });
+  }
+
+  Future<void> requestToJoinTeam(String teamId, String playerId) async {
+    await FirebaseService.teamsCollection.doc(teamId).update({
+      'joinRequests': FieldValue.arrayUnion([playerId]),
+    });
+  }
+
+  Future<void> approveTeamJoinRequest(String teamId, String playerId) async {
+    await FirebaseService.teamsCollection.doc(teamId).update({
+      'players': FieldValue.arrayUnion([playerId]),
+      'joinRequests': FieldValue.arrayRemove([playerId]),
+    });
+  }
+
+  Future<void> rejectTeamJoinRequest(String teamId, String playerId) async {
+    await FirebaseService.teamsCollection.doc(teamId).update({
+      'joinRequests': FieldValue.arrayRemove([playerId]),
     });
   }
 
   Future<void> leaveTeam(String teamId, String playerId) async {
     await FirebaseService.teamsCollection.doc(teamId).update({
       'players': FieldValue.arrayRemove([playerId]),
+      'joinRequests': FieldValue.arrayRemove([playerId]),
     });
   }
 

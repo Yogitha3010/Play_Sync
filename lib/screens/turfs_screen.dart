@@ -301,28 +301,34 @@ class _TurfsScreenState extends State<TurfsScreen> {
                 color: Colors.green[700],
               ),
             ),
-            SizedBox(height: 14),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: turf.gamesAvailable.take(3).map((game) {
-                return Container(
-                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: AppTheme.theme.colorScheme.primary.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    game,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                );
-              }).toList(),
+            SizedBox(height: 12),
+            Expanded(
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: turf.gamesAvailable.take(3).map((game) {
+                    return Container(
+                      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppTheme.theme.colorScheme.primary.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        game,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
             ),
-            Spacer(),
             Align(
               alignment: Alignment.centerRight,
               child: Text(

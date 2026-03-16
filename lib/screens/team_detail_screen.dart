@@ -6,6 +6,7 @@ import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import 'player_detail_screen.dart';
 import 'chat_screen.dart';
+import 'create_match_screen.dart';
 
 class TeamDetailScreen extends StatefulWidget {
   final TeamModel team;
@@ -20,6 +21,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
   List<PlayerProfileModel> _players = [];
+  List<PlayerProfileModel> _requestingPlayers = [];
   bool _isLoading = true;
   late TeamModel _currentTeam;
 
@@ -43,9 +45,18 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
       }
     }
 
+    List<PlayerProfileModel> requestProfiles = [];
+    for (String playerId in _currentTeam.joinRequests) {
+      final profile = await _firestoreService.getPlayerProfile(playerId);
+      if (profile != null) {
+        requestProfiles.add(profile);
+      }
+    }
+
     if (mounted) {
       setState(() {
         _players = loadedPlayers;
+        _requestingPlayers = requestProfiles;
         _isLoading = false;
       });
     }
@@ -54,7 +65,17 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
   Future<void> _joinTeam() async {
     final user = _authService.currentUser;
     if (user != null) {
-      await _firestoreService.joinTeam(_currentTeam.teamId, user.uid);
+      if (_currentTeam.visibility == 'private') {
+        await _firestoreService.requestToJoinTeam(_currentTeam.teamId, user.uid);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Join request sent to the team admin')),
+          );
+        }
+      } else {
+        await _firestoreService.joinTeam(_currentTeam.teamId, user.uid);
+      }
+
       final updatedTeam = await _firestoreService.getTeam(_currentTeam.teamId);
       if (updatedTeam != null && mounted) {
         setState(() {
@@ -62,6 +83,28 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
         });
         _loadPlayers();
       }
+    }
+  }
+
+  Future<void> _approveRequest(String playerId) async {
+    await _firestoreService.approveTeamJoinRequest(_currentTeam.teamId, playerId);
+    final updatedTeam = await _firestoreService.getTeam(_currentTeam.teamId);
+    if (updatedTeam != null && mounted) {
+      setState(() {
+        _currentTeam = updatedTeam;
+      });
+      _loadPlayers();
+    }
+  }
+
+  Future<void> _rejectRequest(String playerId) async {
+    await _firestoreService.rejectTeamJoinRequest(_currentTeam.teamId, playerId);
+    final updatedTeam = await _firestoreService.getTeam(_currentTeam.teamId);
+    if (updatedTeam != null && mounted) {
+      setState(() {
+        _currentTeam = updatedTeam;
+      });
+      _loadPlayers();
     }
   }
 
@@ -84,6 +127,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
     final user = _authService.currentUser;
     final isMember = user != null && _currentTeam.players.contains(user.uid);
     final isCreator = user != null && _currentTeam.createdBy == user.uid;
+    final hasRequested = user != null && _currentTeam.joinRequests.contains(user.uid);
 
     return Scaffold(
       appBar: AppBar(
@@ -138,7 +182,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        _currentTeam.gameType,
+                        '${_currentTeam.gameType} - ${_currentTeam.visibility.toUpperCase()}',
                         style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[800]),
                       ),
                     ),
@@ -147,7 +191,11 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                   if (user != null)
                     Center(
                       child: ElevatedButton(
-                        onPressed: isCreator ? null : (isMember ? _leaveTeam : _joinTeam),
+                        onPressed: isCreator
+                            ? null
+                            : (isMember
+                                ? _leaveTeam
+                                : (hasRequested ? null : _joinTeam)),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: isCreator
                               ? Colors.grey
@@ -160,12 +208,94 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                         child: Text(
                           isCreator
                               ? 'You Created This Team'
-                              : (isMember ? 'Leave Team' : 'Join Team'),
+                              : (isMember
+                                  ? 'Leave Team'
+                                  : (hasRequested ? 'Request Sent' : (_currentTeam.visibility == 'private' ? 'Request to Join' : 'Join Team'))),
                           style: TextStyle(fontSize: 16, color: Colors.white),
                         ),
                       ),
                     ),
+                  if (user != null && !isMember && !isCreator && hasRequested)
+                    Padding(
+                      padding: EdgeInsets.only(top: 12),
+                      child: Center(
+                        child: Text(
+                          'Your request is pending admin approval.',
+                          style: TextStyle(color: Colors.orange[800]),
+                        ),
+                      ),
+                    ),
+                  if (isMember || isCreator)
+                    Padding(
+                      padding: EdgeInsets.only(top: 16),
+                      child: Center(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => CreateMatchScreen(team: _currentTeam),
+                              ),
+                            );
+                          },
+                          icon: Icon(Icons.play_circle_fill),
+                          label: Text('Start Match'),
+                          style: OutlinedButton.styleFrom(
+                            padding: EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                            side: BorderSide(color: AppTheme.theme.primaryColor),
+                            foregroundColor: AppTheme.theme.primaryColor,
+                          ),
+                        ),
+                      ),
+                    ),
                   SizedBox(height: 30),
+                  if (isCreator && _currentTeam.visibility == 'private') ...[
+                    Text(
+                      'Join Requests (${_requestingPlayers.length})',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(height: 10),
+                    if (_requestingPlayers.isEmpty)
+                      Text(
+                        'No pending requests right now.',
+                        style: TextStyle(color: Colors.grey[600]),
+                      )
+                    else
+                      ..._requestingPlayers.map((player) {
+                        return Card(
+                          margin: EdgeInsets.symmetric(vertical: 8),
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: Colors.orange[100],
+                              child: Text(
+                                (player.name?.isNotEmpty ?? false)
+                                    ? player.name![0].toUpperCase()
+                                    : '?',
+                                style: TextStyle(color: Colors.orange[900]),
+                              ),
+                            ),
+                            title: Text(player.name ?? 'Unknown Player'),
+                            subtitle: Text(
+                              'Skill Level: ${player.skillLevel.toStringAsFixed(1)}',
+                            ),
+                            trailing: Wrap(
+                              spacing: 8,
+                              children: [
+                                TextButton(
+                                  onPressed: () => _rejectRequest(player.userId),
+                                  child: Text('Reject'),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () => _approveRequest(player.userId),
+                                  child: Text('Accept'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
+                    SizedBox(height: 30),
+                  ],
                   Text(
                     'Team Members (${_players.length})',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),

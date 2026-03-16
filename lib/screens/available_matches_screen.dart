@@ -37,6 +37,8 @@ class _AvailableMatchesScreenState extends State<AvailableMatchesScreen> {
       }
 
       final pendingMatches = await _firestoreService.getMatchesByStatus('pending');
+      final userTeams = await _firestoreService.getTeamsForPlayer(currentUser.uid);
+      final userTeamIds = userTeams.map((team) => team.teamId).toSet();
 
       final now = DateTime.now();
       final filteredMatches = pendingMatches.where((match) {
@@ -44,8 +46,10 @@ class _AvailableMatchesScreenState extends State<AvailableMatchesScreen> {
         final isFull = match.players.length >= match.maxPlayers;
         final isExpired =
             match.scheduledTime != null && !match.scheduledTime!.isAfter(now);
+        final isVisibleToUser = match.visibility != 'team' ||
+            (match.teamId != null && userTeamIds.contains(match.teamId));
 
-        return !isAlreadyJoined && !isFull && !isExpired;
+        return isVisibleToUser && !isAlreadyJoined && !isFull && !isExpired;
       }).toList()
         ..sort((a, b) {
           final aTime = a.scheduledTime ?? a.createdAt;
@@ -141,13 +145,18 @@ class _AvailableMatchesScreenState extends State<AvailableMatchesScreen> {
                   Container(
                     padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.2),
+                      color: (match.visibility == 'team'
+                              ? Colors.teal
+                              : Colors.orange)
+                          .withOpacity(0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      'OPEN TO JOIN',
+                      match.visibility == 'team' ? 'TEAM MATCH' : 'OPEN TO JOIN',
                       style: TextStyle(
-                        color: Colors.orange[800],
+                        color: match.visibility == 'team'
+                            ? Colors.teal[800]
+                            : Colors.orange[800],
                         fontWeight: FontWeight.bold,
                         fontSize: 12,
                       ),

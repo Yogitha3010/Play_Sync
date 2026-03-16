@@ -7,10 +7,15 @@ import '../models/match_model.dart';
 import '../models/player_profile_model.dart';
 import '../models/turf_model.dart';
 import '../models/booking_model.dart';
+import '../models/team_model.dart';
 import '../theme/app_theme.dart';
 import 'match_detail_screen.dart';
 
 class CreateMatchScreen extends StatefulWidget {
+  final TeamModel? team;
+
+  const CreateMatchScreen({Key? key, this.team}) : super(key: key);
+
   @override
   _CreateMatchScreenState createState() => _CreateMatchScreenState();
 }
@@ -42,6 +47,9 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.team != null) {
+      selectedGame = widget.team!.gameType;
+    }
     _loadTurfsForGame(selectedGame);
   }
 
@@ -92,6 +100,8 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
         createdAt: DateTime.now(),
         scheduledTime: scheduledTime,
         maxPlayers: maxPlayers,
+        visibility: widget.team != null ? 'team' : 'public',
+        teamId: widget.team?.teamId,
       );
 
       await _firestoreService.createMatch(match);
@@ -195,6 +205,34 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
                 'Set up a match and invite players',
                 style: TextStyle(color: Colors.grey[600]),
               ),
+              if (widget.team != null) ...[
+                SizedBox(height: 16),
+                Container(
+                  padding: EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppTheme.theme.colorScheme.primary.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppTheme.theme.colorScheme.primary.withOpacity(0.2),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.groups, color: AppTheme.theme.colorScheme.primary),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'This match will be visible only to members of ${widget.team!.teamName}.',
+                          style: TextStyle(
+                            color: AppTheme.theme.colorScheme.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               SizedBox(height: 30),
 
               // Game Type
@@ -214,15 +252,17 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
                 items: games.map((game) {
                   return DropdownMenuItem(value: game, child: Text(game));
                 }).toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() {
-                      selectedGame = value;
-                      selectedTurf = null;
-                    });
-                    _loadTurfsForGame(value);
-                  }
-                },
+                onChanged: widget.team != null
+                    ? null
+                    : (value) {
+                        if (value != null) {
+                          setState(() {
+                            selectedGame = value;
+                            selectedTurf = null;
+                          });
+                          _loadTurfsForGame(value);
+                        }
+                      },
               ),
               SizedBox(height: 20),
 

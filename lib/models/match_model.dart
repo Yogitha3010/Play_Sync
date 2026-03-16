@@ -15,6 +15,8 @@ class MatchModel {
   final Map<String, dynamic>? tossResult;
   final DateTime? scheduledTime;
   final int maxPlayers;
+  final String visibility; // 'public' or 'team'
+  final String? teamId;
 
   MatchModel({
     required this.matchId,
@@ -31,6 +33,8 @@ class MatchModel {
     this.tossResult,
     this.scheduledTime,
     this.maxPlayers = 10,
+    this.visibility = 'public',
+    this.teamId,
   });
 
   Map<String, dynamic> toMap() {
@@ -50,6 +54,8 @@ class MatchModel {
       'tossResult': tossResult,
       'scheduledTime': scheduledTime?.toIso8601String(),
       'maxPlayers': maxPlayers,
+      'visibility': visibility,
+      'teamId': teamId,
     };
   }
 
@@ -75,6 +81,8 @@ class MatchModel {
           ? DateTime.parse(map['scheduledTime'])
           : null,
       maxPlayers: map['maxPlayers'] ?? 10,
+      visibility: map['visibility'] ?? 'public',
+      teamId: map['teamId'],
     );
   }
 
@@ -93,6 +101,8 @@ class MatchModel {
     Map<String, dynamic>? tossResult,
     DateTime? scheduledTime,
     int? maxPlayers,
+    String? visibility,
+    String? teamId,
   }) {
     return MatchModel(
       matchId: matchId ?? this.matchId,
@@ -109,6 +119,8 @@ class MatchModel {
       tossResult: tossResult ?? this.tossResult,
       scheduledTime: scheduledTime ?? this.scheduledTime,
       maxPlayers: maxPlayers ?? this.maxPlayers,
+      visibility: visibility ?? this.visibility,
+      teamId: teamId ?? this.teamId,
     );
   }
 }

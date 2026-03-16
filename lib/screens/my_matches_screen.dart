@@ -45,9 +45,28 @@ class _MyMatchesScreenState extends State<MyMatchesScreen> {
     }
   }
 
+  String _getEffectiveStatus(MatchModel match) {
+    if (match.matchStatus == 'active' || match.matchStatus == 'completed') {
+      return match.matchStatus;
+    }
+
+    if (match.players.length >= match.maxPlayers) {
+      return 'active';
+    }
+
+    if (match.scheduledTime != null &&
+        !match.scheduledTime!.isAfter(DateTime.now())) {
+      return 'completed';
+    }
+
+    return 'pending';
+  }
+
   List<MatchModel> get filteredMatches {
     if (selectedFilter == 'all') return matches;
-    return matches.where((m) => m.matchStatus == selectedFilter).toList();
+    return matches
+        .where((m) => _getEffectiveStatus(m) == selectedFilter)
+        .toList();
   }
 
   @override
@@ -183,6 +202,23 @@ class _MatchCard extends StatelessWidget {
     required this.onTap,
   });
 
+  String _getEffectiveStatus(MatchModel match) {
+    if (match.matchStatus == 'active' || match.matchStatus == 'completed') {
+      return match.matchStatus;
+    }
+
+    if (match.players.length >= match.maxPlayers) {
+      return 'active';
+    }
+
+    if (match.scheduledTime != null &&
+        !match.scheduledTime!.isAfter(DateTime.now())) {
+      return 'completed';
+    }
+
+    return 'pending';
+  }
+
   Color _getStatusColor(String status) {
     switch (status) {
       case 'pending':
@@ -198,6 +234,8 @@ class _MatchCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final effectiveStatus = _getEffectiveStatus(match);
+
     return Card(
       margin: EdgeInsets.only(bottom: 15),
       elevation: 3,
@@ -225,13 +263,13 @@ class _MatchCard extends StatelessWidget {
                   Container(
                     padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
-                      color: _getStatusColor(match.matchStatus).withOpacity(0.2),
+                      color: _getStatusColor(effectiveStatus).withOpacity(0.2),
                       borderRadius: BorderRadius.circular(15),
                     ),
                     child: Text(
-                      match.matchStatus.toUpperCase(),
+                      effectiveStatus.toUpperCase(),
                       style: TextStyle(
-                        color: _getStatusColor(match.matchStatus),
+                        color: _getStatusColor(effectiveStatus),
                         fontWeight: FontWeight.bold,
                         fontSize: 12,
                       ),
