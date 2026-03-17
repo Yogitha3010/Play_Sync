@@ -1,4 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../models/player_profile_model.dart';
 import '../models/turf_model.dart';
 import '../models/match_model.dart';
@@ -7,6 +9,15 @@ import '../models/achievement_model.dart';
 import '../models/team_model.dart';
 import '../models/booking_model.dart';
 import 'firebase_service.dart';
+
+class BookingConflictException implements Exception {
+  final String message;
+
+  BookingConflictException(this.message);
+
+  @override
+  String toString() => message;
+}
 
 class FirestoreService {
   // Player Profile Operations
@@ -106,6 +117,10 @@ class FirestoreService {
     await FirebaseService.matchesCollection
         .doc(match.matchId)
         .set(match.toMap());
+  }
+
+  Future<void> deleteMatch(String matchId) async {
+    await FirebaseService.matchesCollection.doc(matchId).delete();
   }
 
   Future<MatchModel?> getMatch(String matchId) async {
@@ -264,39 +279,290 @@ class FirestoreService {
   }
 
   // Booking Operations
-  Future<void> createBooking(BookingModel booking) async {
-    await FirebaseService.bookingsCollection
-        .doc(booking.bookingId)
-        .set(booking.toMap());
+  Future<void> createBooking(
+    BookingModel booking, {
+    int maxBookingsPerSlot = 1,
+  }) async {
+    final normalizedDate = _normalizeBookingDate(booking.bookingDate);
+    final normalizedSlot = _normalizeSlotTime(booking.slotTime);
+    final slotDocId = _buildBookingSlotId(
+      turfId: booking.turfId,
+      gameType: booking.gameType,
+      bookingDate: normalizedDate,
+      slotTime: normalizedSlot,
+    );
+
+    final bookingMap = booking.toMap()
+      ..['bookingId'] = booking.bookingId
+      ..['bookingDate'] = normalizedDate.toIso8601String()
+      ..['slotTime'] = normalizedSlot;
+
+    final bookingRef = FirebaseService.bookingsCollection.doc(booking.bookingId);
+    final slotRef = FirebaseService.bookingSlotsCollection.doc(slotDocId);
+
+    await FirebaseService.firestore.runTransaction((transaction) async {
+      final existingBooking = await transaction.get(bookingRef);
+      if (existingBooking.exists) {
+        throw BookingConflictException('This booking already exists.');
+      }
+
+      final existingSlot = await transaction.get(slotRef);
+      final slotData = existingSlot.data() as Map<String, dynamic>?;
+      final activeBookings = (slotData?['activeBookings'] ?? 0) as int;
+
+      if (activeBookings >= maxBookingsPerSlot) {
+        throw BookingConflictException(
+          'This turf is already fully booked for ${booking.gameType} on ${normalizedSlot}.',
+        );
+      }
+
+      transaction.set(slotRef, {
+        'slotId': slotDocId,
+        'turfId': booking.turfId,
+        'gameType': booking.gameType,
+        'bookingDate': normalizedDate.toIso8601String(),
+        'slotTime': normalizedSlot,
+        'activeBookings': activeBookings + 1,
+        'maxBookings': maxBookingsPerSlot,
+        'updatedAt': DateTime.now().toIso8601String(),
+      }, SetOptions(merge: true));
+      transaction.set(bookingRef, bookingMap);
+    });
   }
 
   Future<List<BookingModel>> getTurfBookings(String turfId) async {
     final querySnapshot = await FirebaseService.bookingsCollection
         .where('turfId', isEqualTo: turfId)
-        .orderBy('bookingDate', descending: true)
         .get();
-    return querySnapshot.docs
+    final bookings = querySnapshot.docs
         .map((doc) => BookingModel.fromMap(doc.data() as Map<String, dynamic>))
         .toList();
+    bookings.sort((a, b) => b.bookingDate.compareTo(a.bookingDate));
+    return bookings;
   }
 
   Future<List<BookingModel>> getPlayerBookings(String playerId) async {
     final querySnapshot = await FirebaseService.bookingsCollection
         .where('playerId', isEqualTo: playerId)
-        .orderBy('bookingDate', descending: true)
         .get();
-    return querySnapshot.docs
+    final bookings = querySnapshot.docs
         .map((doc) => BookingModel.fromMap(doc.data() as Map<String, dynamic>))
         .toList();
+    bookings.sort((a, b) => b.bookingDate.compareTo(a.bookingDate));
+    return bookings;
   }
 
   Future<List<BookingModel>> getOwnerBookings(String ownerId) async {
     final querySnapshot = await FirebaseService.bookingsCollection
         .where('turfOwnerId', isEqualTo: ownerId)
-        .orderBy('bookingDate', descending: true)
         .get();
-    return querySnapshot.docs
+    final bookings = querySnapshot.docs
         .map((doc) => BookingModel.fromMap(doc.data() as Map<String, dynamic>))
         .toList();
+    bookings.sort((a, b) => b.bookingDate.compareTo(a.bookingDate));
+    return bookings;
+  }
+
+  Future<BookingModel?> getMatchBooking(String matchId) async {
+    final querySnapshot = await FirebaseService.bookingsCollection
+        .where('matchId', isEqualTo: matchId)
+        .get();
+
+    if (querySnapshot.docs.isEmpty) {
+      return null;
+    }
+
+    final bookings = querySnapshot.docs
+        .map((doc) => BookingModel.fromMap(doc.data() as Map<String, dynamic>))
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+    return bookings.first;
+  }
+
+  Future<void> deleteBooking(String bookingId) async {
+    final bookingRef = FirebaseService.bookingsCollection.doc(bookingId);
+
+    await FirebaseService.firestore.runTransaction((transaction) async {
+      final bookingSnapshot = await transaction.get(bookingRef);
+      if (!bookingSnapshot.exists) {
+        return;
+      }
+
+      final booking = BookingModel.fromMap(
+        bookingSnapshot.data() as Map<String, dynamic>,
+      );
+      final normalizedDate = _normalizeBookingDate(booking.bookingDate);
+      final normalizedSlot = _normalizeSlotTime(booking.slotTime);
+      final slotRef = FirebaseService.bookingSlotsCollection.doc(
+        _buildBookingSlotId(
+          turfId: booking.turfId,
+          gameType: booking.gameType,
+          bookingDate: normalizedDate,
+          slotTime: normalizedSlot,
+        ),
+      );
+
+      final slotSnapshot = await transaction.get(slotRef);
+      if (slotSnapshot.exists) {
+        final slotData = slotSnapshot.data() as Map<String, dynamic>?;
+        final activeBookings = (slotData?['activeBookings'] ?? 0) as int;
+        final updatedCount = activeBookings > 0 ? activeBookings - 1 : 0;
+
+        if (updatedCount == 0) {
+          transaction.delete(slotRef);
+        } else {
+          transaction.update(slotRef, {
+            'activeBookings': updatedCount,
+            'updatedAt': DateTime.now().toIso8601String(),
+          });
+        }
+      }
+
+      transaction.delete(bookingRef);
+    });
+  }
+
+  Future<void> rescheduleBooking(
+    BookingModel booking, {
+    required DateTime newBookingDate,
+    required String newSlotTime,
+    int maxBookingsPerSlot = 1,
+  }) async {
+    final oldDate = _normalizeBookingDate(booking.bookingDate);
+    final oldSlot = _normalizeSlotTime(booking.slotTime);
+    final newDate = _normalizeBookingDate(newBookingDate);
+    final normalizedNewSlot = _normalizeSlotTime(newSlotTime);
+
+    final oldSlotRef = FirebaseService.bookingSlotsCollection.doc(
+      _buildBookingSlotId(
+        turfId: booking.turfId,
+        gameType: booking.gameType,
+        bookingDate: oldDate,
+        slotTime: oldSlot,
+      ),
+    );
+    final newSlotRef = FirebaseService.bookingSlotsCollection.doc(
+      _buildBookingSlotId(
+        turfId: booking.turfId,
+        gameType: booking.gameType,
+        bookingDate: newDate,
+        slotTime: normalizedNewSlot,
+      ),
+    );
+    final bookingRef = FirebaseService.bookingsCollection.doc(booking.bookingId);
+
+    await FirebaseService.firestore.runTransaction((transaction) async {
+      final bookingSnapshot = await transaction.get(bookingRef);
+      if (!bookingSnapshot.exists) {
+        throw BookingConflictException('This booking no longer exists.');
+      }
+
+      final sameSlot =
+          _isSameBookingDay(oldDate, newDate) && oldSlot == normalizedNewSlot;
+
+      if (!sameSlot) {
+        final newSlotSnapshot = await transaction.get(newSlotRef);
+        final newSlotData = newSlotSnapshot.data() as Map<String, dynamic>?;
+        final newActiveBookings = (newSlotData?['activeBookings'] ?? 0) as int;
+
+        if (newActiveBookings >= maxBookingsPerSlot) {
+          throw BookingConflictException(
+            'This turf is already fully booked for ${booking.gameType} on ${normalizedNewSlot}.',
+          );
+        }
+
+        final oldSlotSnapshot = await transaction.get(oldSlotRef);
+        if (oldSlotSnapshot.exists) {
+          final oldSlotData = oldSlotSnapshot.data() as Map<String, dynamic>?;
+          final oldActiveBookings = (oldSlotData?['activeBookings'] ?? 0) as int;
+          final updatedOldCount = oldActiveBookings > 0 ? oldActiveBookings - 1 : 0;
+
+          if (updatedOldCount == 0) {
+            transaction.delete(oldSlotRef);
+          } else {
+            transaction.update(oldSlotRef, {
+              'activeBookings': updatedOldCount,
+              'updatedAt': DateTime.now().toIso8601String(),
+            });
+          }
+        }
+
+        transaction.set(newSlotRef, {
+          'slotId': newSlotRef.id,
+          'turfId': booking.turfId,
+          'gameType': booking.gameType,
+          'bookingDate': newDate.toIso8601String(),
+          'slotTime': normalizedNewSlot,
+          'activeBookings': newActiveBookings + 1,
+          'maxBookings': maxBookingsPerSlot,
+          'updatedAt': DateTime.now().toIso8601String(),
+        }, SetOptions(merge: true));
+      }
+
+      transaction.update(bookingRef, {
+        'bookingDate': newDate.toIso8601String(),
+        'slotTime': normalizedNewSlot,
+      });
+    });
+  }
+
+  String _buildBookingSlotId({
+    required String turfId,
+    required String gameType,
+    required DateTime bookingDate,
+    required String slotTime,
+  }) {
+    final safeGameType = _slugify(gameType);
+    final safeSlot = _slugify(slotTime);
+    final dateKey =
+        '${bookingDate.year.toString().padLeft(4, '0')}${bookingDate.month.toString().padLeft(2, '0')}${bookingDate.day.toString().padLeft(2, '0')}';
+
+    return '${turfId}_${safeGameType}_${dateKey}_$safeSlot';
+  }
+
+  DateTime _normalizeBookingDate(DateTime bookingDate) {
+    return DateTime(bookingDate.year, bookingDate.month, bookingDate.day);
+  }
+
+  bool _isSameBookingDay(DateTime first, DateTime second) {
+    return first.year == second.year &&
+        first.month == second.month &&
+        first.day == second.day;
+  }
+
+  String _normalizeSlotTime(String slotTime) {
+    final parts = slotTime.split('-');
+    if (parts.length != 2) {
+      return slotTime.trim();
+    }
+
+    final start = _normalizeTimeLabel(parts[0]);
+    final end = _normalizeTimeLabel(parts[1]);
+    return '$start - $end';
+  }
+
+  String _normalizeTimeLabel(String value) {
+    final match = RegExp(r'^\s*(\d{1,2}):(\d{2})\s*$').firstMatch(value);
+    if (match == null) {
+      return value.trim();
+    }
+
+    final hour = int.tryParse(match.group(1) ?? '');
+    final minute = int.tryParse(match.group(2) ?? '');
+    if (hour == null || minute == null) {
+      return value.trim();
+    }
+
+    return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+  }
+
+  String _slugify(String value) {
+    return value
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceAll(RegExp(r'^_|_$'), '');
   }
 }

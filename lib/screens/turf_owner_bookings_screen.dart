@@ -36,8 +36,12 @@ class _TurfOwnerBookingsScreenState extends State<TurfOwnerBookingsScreen> {
       final turfs = await _firestoreService.getTurfsByOwner(user.uid);
       _myTurfs = turfs;
 
-      // 2. Get all bookings for this owner
-      final allBookings = await _firestoreService.getOwnerBookings(user.uid);
+      // 2. Get all bookings for the owner's turfs
+      final bookingsByTurf = await Future.wait(
+        turfs.map((turf) => _firestoreService.getTurfBookings(turf.turfId)),
+      );
+      final allBookings = bookingsByTurf.expand((bookings) => bookings).toList()
+        ..sort((a, b) => b.bookingDate.compareTo(a.bookingDate));
 
       // 3. Group bookings by turfId
       final Map<String, List<BookingModel>> bookingsMap = {};

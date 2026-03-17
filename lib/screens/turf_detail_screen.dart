@@ -21,27 +21,39 @@ class TurfDetailScreen extends StatefulWidget {
 class _TurfDetailScreenState extends State<TurfDetailScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
+  final List<String> _allSlots = const [
+    '06:00 - 07:00',
+    '07:00 - 08:00',
+    '08:00 - 09:00',
+    '16:00 - 17:00',
+    '17:00 - 18:00',
+    '18:00 - 19:00',
+    '19:00 - 20:00',
+    '20:00 - 21:00',
+    '21:00 - 22:00',
+  ];
 
   Future<void> _showBookingSheet(BuildContext context) async {
     DateTime? selectedDate = DateTime.now();
     String? selectedSlot;
     String? selectedGame;
+    List<BookingModel> existingBookings = [];
 
     if (widget.turf.gamesAvailable.isNotEmpty) {
       selectedGame = widget.turf.gamesAvailable.first;
     }
 
-    final List<String> slots = [
-      '06:00 - 07:00',
-      '07:00 - 08:00',
-      '08:00 - 09:00',
-      '16:00 - 17:00',
-      '17:00 - 18:00',
-      '18:00 - 19:00',
-      '19:00 - 20:00',
-      '20:00 - 21:00',
-      '21:00 - 22:00',
-    ];
+    try {
+      existingBookings = await _firestoreService.getTurfBookings(
+        widget.turf.turfId,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to load slots: $e')));
+      return;
+    }
 
     await showModalBottomSheet(
       context: context,
@@ -52,6 +64,16 @@ class _TurfDetailScreenState extends State<TurfDetailScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setModalState) {
+            final availableSlots = _getAvailableSlots(
+              bookings: existingBookings,
+              selectedDate: selectedDate,
+              selectedGame: selectedGame,
+            );
+
+            if (selectedSlot != null && !availableSlots.contains(selectedSlot)) {
+              selectedSlot = null;
+            }
+
             return Padding(
               padding: EdgeInsets.only(
                 bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -81,7 +103,10 @@ class _TurfDetailScreenState extends State<TurfDetailScreen> {
                     items: widget.turf.gamesAvailable.map((game) {
                       return DropdownMenuItem(value: game, child: Text(game));
                     }).toList(),
-                    onChanged: (val) => setModalState(() => selectedGame = val),
+                    onChanged: (val) => setModalState(() {
+                      selectedGame = val;
+                      selectedSlot = null;
+                    }),
                   ),
                   SizedBox(height: 15),
 
@@ -105,26 +130,54 @@ class _TurfDetailScreenState extends State<TurfDetailScreen> {
                         lastDate: DateTime.now().add(Duration(days: 30)),
                       );
                       if (picked != null) {
-                        setModalState(() => selectedDate = picked);
+                        setModalState(() {
+                          selectedDate = picked;
+                          selectedSlot = null;
+                        });
                       }
                     },
                   ),
                   SizedBox(height: 15),
 
                   // Slot Selection
-                  DropdownButtonFormField<String>(
-                    value: selectedSlot,
-                    decoration: InputDecoration(
-                      labelText: 'Select Time Slot',
-                      border: OutlineInputBorder(
+                  if (availableSlots.isEmpty)
+                    Container(
+                      padding: EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.08),
                         borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.orange.shade200),
                       ),
+                      child: Text(
+                        selectedGame == null || selectedDate == null
+                            ? 'Select a game and date to view available slots.'
+                            : 'No slots available for this game on the selected date.',
+                        style: TextStyle(color: Colors.orange.shade900),
+                      ),
+                    )
+                  else
+                    DropdownButtonFormField<String>(
+                      value: selectedSlot,
+                      decoration: InputDecoration(
+                        labelText: 'Select Time Slot',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      items: availableSlots.map((slot) {
+                        final remainingCourts = _getRemainingCapacity(
+                          bookings: existingBookings,
+                          selectedDate: selectedDate,
+                          selectedGame: selectedGame,
+                          slotTime: slot,
+                        );
+                        final label = remainingCourts > 1
+                            ? '$slot ($remainingCourts courts left)'
+                            : slot;
+                        return DropdownMenuItem(value: slot, child: Text(label));
+                      }).toList(),
+                      onChanged: (val) => setModalState(() => selectedSlot = val),
                     ),
-                    items: slots.map((slot) {
-                      return DropdownMenuItem(value: slot, child: Text(slot));
-                    }).toList(),
-                    onChanged: (val) => setModalState(() => selectedSlot = val),
-                  ),
                   SizedBox(height: 25),
 
                   ElevatedButton(
@@ -162,10 +215,19 @@ class _TurfDetailScreenState extends State<TurfDetailScreen> {
                           createdAt: DateTime.now(),
                         );
 
-                        await _firestoreService.createBooking(booking);
+                        await _firestoreService.createBooking(
+                          booking,
+                          maxBookingsPerSlot:
+                              widget.turf.courts[selectedGame!] ?? 1,
+                        );
+                        if (!mounted) return;
                         Navigator.pop(context); // Close sheet
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(content: Text('Booking confirmed!')),
+                        );
+                      } on BookingConflictException catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(e.message)),
                         );
                       } catch (e) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -393,5 +455,80 @@ class _TurfDetailScreenState extends State<TurfDetailScreen> {
         ),
       ),
     );
+  }
+
+  List<String> _getAvailableSlots({
+    required List<BookingModel> bookings,
+    required DateTime? selectedDate,
+    required String? selectedGame,
+  }) {
+    if (selectedDate == null || selectedGame == null) {
+      return [];
+    }
+
+    return _allSlots.where((slot) {
+      return _getRemainingCapacity(
+            bookings: bookings,
+            selectedDate: selectedDate,
+            selectedGame: selectedGame,
+            slotTime: slot,
+          ) >
+          0;
+    }).toList();
+  }
+
+  int _getRemainingCapacity({
+    required List<BookingModel> bookings,
+    required DateTime? selectedDate,
+    required String? selectedGame,
+    required String slotTime,
+  }) {
+    if (selectedDate == null || selectedGame == null) {
+      return 0;
+    }
+
+    final normalizedSlot = _normalizeSlotTime(slotTime);
+    final bookedCount = bookings.where((booking) {
+      return booking.status != 'cancelled' &&
+          booking.gameType == selectedGame &&
+          _isSameDay(booking.bookingDate, selectedDate) &&
+          _normalizeSlotTime(booking.slotTime) == normalizedSlot;
+    }).length;
+
+    final totalCourts = widget.turf.courts[selectedGame] ?? 1;
+    final remaining = totalCourts - bookedCount;
+    return remaining > 0 ? remaining : 0;
+  }
+
+  bool _isSameDay(DateTime first, DateTime second) {
+    return first.year == second.year &&
+        first.month == second.month &&
+        first.day == second.day;
+  }
+
+  String _normalizeSlotTime(String slotTime) {
+    final parts = slotTime.split('-');
+    if (parts.length != 2) {
+      return slotTime.trim();
+    }
+
+    final start = _normalizeTimeLabel(parts[0]);
+    final end = _normalizeTimeLabel(parts[1]);
+    return '$start - $end';
+  }
+
+  String _normalizeTimeLabel(String value) {
+    final match = RegExp(r'^\s*(\d{1,2}):(\d{2})\s*$').firstMatch(value);
+    if (match == null) {
+      return value.trim();
+    }
+
+    final hour = int.tryParse(match.group(1) ?? '');
+    final minute = int.tryParse(match.group(2) ?? '');
+    if (hour == null || minute == null) {
+      return value.trim();
+    }
+
+    return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
   }
 }

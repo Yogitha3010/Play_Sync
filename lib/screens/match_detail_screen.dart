@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:uuid/uuid.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../services/matchmaking_service.dart';
 import '../models/match_model.dart';
 import '../models/player_profile_model.dart';
+import '../models/booking_model.dart';
+import '../models/turf_model.dart';
 import '../theme/app_theme.dart';
 import 'feedback_screen.dart';
 import '../services/achievement_service.dart';
-import 'package:geolocator/geolocator.dart';
 import 'chat_screen.dart';
-import 'turf_detail_screen.dart';
 import '../models/team_model.dart';
 
 class MatchDetailScreen extends StatefulWidget {
@@ -29,6 +28,20 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
   Map<String, List<String>> teams = {'teamA': [], 'teamB': []};
   Map<String, dynamic>? prediction;
   TeamModel? linkedTeam;
+  BookingModel? matchBooking;
+  TurfModel? matchTurf;
+  List<String> availableSlotsForBooking = [];
+  final List<String> _allSlots = const [
+    '06:00 - 07:00',
+    '07:00 - 08:00',
+    '08:00 - 09:00',
+    '16:00 - 17:00',
+    '17:00 - 18:00',
+    '18:00 - 19:00',
+    '19:00 - 20:00',
+    '20:00 - 21:00',
+    '21:00 - 22:00',
+  ];
 
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
@@ -64,6 +77,10 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
       } else {
         linkedTeam = null;
       }
+
+      matchBooking = await _firestoreService.getMatchBooking(widget.matchId);
+      matchTurf = await _firestoreService.getTurf(matchData.turfId);
+      availableSlotsForBooking = await _loadAvailableSlots(matchData);
 
       // Load player profiles
       await _loadPlayerProfiles();
@@ -323,6 +340,287 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
     }
   }
 
+  String _getEffectiveStatus() {
+    if (match == null) return 'pending';
+    if (match!.matchStatus == 'active' || match!.matchStatus == 'completed') {
+      return match!.matchStatus;
+    }
+    if (match!.players.length >= match!.maxPlayers) {
+      return 'active';
+    }
+    if (match!.scheduledTime != null &&
+        !match!.scheduledTime!.isAfter(DateTime.now())) {
+      return 'completed';
+    }
+    return 'pending';
+  }
+
+  Future<void> _deleteCurrentMatch() async {
+    if (match == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete Match'),
+        content: Text('Do you want to delete this match?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => isLoading = true);
+    try {
+      if (matchBooking != null) {
+        await _firestoreService.deleteBooking(matchBooking!.bookingId);
+      }
+      await _firestoreService.deleteMatch(match!.matchId);
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => isLoading = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error deleting match: $e')));
+    }
+  }
+
+  Future<void> _showEditMatchDialog() async {
+    if (match == null || matchBooking == null) return;
+
+    final turf = await _firestoreService.getTurf(match!.turfId);
+    if (turf == null || !mounted) return;
+
+    List<BookingModel> turfBookings = await _firestoreService.getTurfBookings(
+      match!.turfId,
+    );
+    DateTime selectedDate = matchBooking!.bookingDate;
+    String selectedSlot = _normalizeSlotTime(matchBooking!.slotTime);
+
+    List<String> getAvailableSlots() {
+      final totalCourts = turf.courts[match!.gameType] ?? 1;
+      final currentBookedSlot = _normalizeSlotTime(matchBooking!.slotTime);
+      final slotOptions = List<String>.from(_allSlots);
+      if (!slotOptions.contains(currentBookedSlot)) {
+        slotOptions.add(currentBookedSlot);
+      }
+
+      return slotOptions.where((slot) {
+        final normalizedSlot = _normalizeSlotTime(slot);
+        if (normalizedSlot == currentBookedSlot &&
+            _isSameDay(selectedDate, matchBooking!.bookingDate)) {
+          return true;
+        }
+
+        final bookedCount = turfBookings.where((item) {
+          if (item.bookingId == matchBooking!.bookingId ||
+              item.status == 'cancelled') {
+            return false;
+          }
+
+          return item.gameType == match!.gameType &&
+              _isSameDay(item.bookingDate, selectedDate) &&
+              _normalizeSlotTime(item.slotTime) == normalizedSlot;
+        }).length;
+
+        return bookedCount < totalCourts;
+      }).toList();
+    }
+
+    Future<void> refreshBookings(StateSetter setModalState) async {
+      turfBookings = await _firestoreService.getTurfBookings(match!.turfId);
+      if (!mounted) return;
+      setModalState(() {
+        final latestSlots = getAvailableSlots();
+        if (!latestSlots.contains(selectedSlot)) {
+          selectedSlot = latestSlots.isNotEmpty
+              ? latestSlots.first
+              : _normalizeSlotTime(matchBooking!.slotTime);
+        }
+      });
+    }
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final availableSlots = getAvailableSlots();
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Edit Match',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    '${match!.gameType} at ${match!.location}',
+                    style: TextStyle(color: Colors.grey[700], fontSize: 15),
+                  ),
+                  SizedBox(height: 20),
+                  Container(
+                    padding: EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Current booking',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                        SizedBox(height: 6),
+                        Text(
+                          '${matchBooking!.bookingDate.day}/${matchBooking!.bookingDate.month}/${matchBooking!.bookingDate.year}  |  ${matchBooking!.slotTime}',
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(height: 18),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      'Date: ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+                    ),
+                    trailing: Icon(Icons.calendar_today),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: Colors.grey[300]!),
+                    ),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: selectedDate,
+                        firstDate: DateTime.now(),
+                        lastDate: DateTime.now().add(Duration(days: 365)),
+                      );
+
+                      if (picked != null) {
+                        setModalState(() {
+                          selectedDate = picked;
+                          selectedSlot = _normalizeSlotTime(matchBooking!.slotTime);
+                        });
+                        await refreshBookings(setModalState);
+                      }
+                    },
+                  ),
+                  SizedBox(height: 14),
+                  DropdownButtonFormField<String>(
+                    value: selectedSlot,
+                    decoration: InputDecoration(
+                      labelText: 'Available Slot',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      prefixIcon: Icon(Icons.access_time),
+                    ),
+                    items: availableSlots.map((slot) {
+                      final label = slot == _normalizeSlotTime(matchBooking!.slotTime) &&
+                              _isSameDay(selectedDate, matchBooking!.bookingDate)
+                          ? '$slot (Your booked slot)'
+                          : slot;
+                      return DropdownMenuItem(value: slot, child: Text(label));
+                    }).toList(),
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setModalState(() => selectedSlot = value);
+                    },
+                  ),
+                  SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: () async {
+                      try {
+                        await refreshBookings(setModalState);
+
+                        if (!getAvailableSlots().contains(selectedSlot)) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'That slot is no longer available. Please choose another one.',
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+
+                        await _firestoreService.rescheduleBooking(
+                          matchBooking!,
+                          newBookingDate: selectedDate,
+                          newSlotTime: selectedSlot,
+                          maxBookingsPerSlot: turf.courts[match!.gameType] ?? 1,
+                        );
+
+                        final parts = selectedSlot.split(' - ').first.split(':');
+                        final scheduledTime = DateTime(
+                          selectedDate.year,
+                          selectedDate.month,
+                          selectedDate.day,
+                          int.parse(parts[0]),
+                          int.parse(parts[1]),
+                        );
+
+                        await _firestoreService.updateMatch(match!.matchId, {
+                          'scheduledTime': scheduledTime.toIso8601String(),
+                        });
+
+                        if (!mounted) return;
+                        Navigator.pop(context);
+                        await _loadMatch();
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error updating match: $e')),
+                        );
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.theme.primaryColor,
+                      foregroundColor: Colors.white,
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: Text('Save Changes'),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (isLoading || match == null) {
@@ -339,6 +637,13 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
     final currentUser = _authService.currentUser;
     final isPlayer = currentUser != null && match!.players.contains(currentUser.uid);
     final isCreator = currentUser != null && match!.createdBy == currentUser.uid;
+    final isBookingOwner =
+        currentUser != null &&
+        matchBooking != null &&
+        matchBooking!.playerId == currentUser.uid;
+    final effectiveStatus = _getEffectiveStatus();
+    final canManageMatch =
+        effectiveStatus != 'completed' && (isCreator || isBookingOwner);
 
     return Scaffold(
       appBar: AppBar(
@@ -361,7 +666,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                 );
               },
             ),
-          if (match!.matchStatus == 'completed' && isPlayer)
+          if (effectiveStatus == 'completed' && isPlayer)
             IconButton(
               icon: Icon(Icons.feedback),
               onPressed: () {
@@ -404,13 +709,13 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                         Container(
                           padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
-                            color: _getStatusColor(match!.matchStatus).withOpacity(0.2),
+                            color: _getStatusColor(effectiveStatus).withOpacity(0.2),
                             borderRadius: BorderRadius.circular(15),
                           ),
                           child: Text(
-                            match!.matchStatus.toUpperCase(),
+                            effectiveStatus.toUpperCase(),
                             style: TextStyle(
-                              color: _getStatusColor(match!.matchStatus),
+                              color: _getStatusColor(effectiveStatus),
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -418,42 +723,14 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                       ],
                     ),
                     SizedBox(height: 15),
-                    if (match!.turfId != null)
-                      InkWell(
-                        onTap: () async {
-                          final turfData = await _firestoreService.getTurf(match!.turfId!);
-                          if (turfData != null && mounted) {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => TurfDetailScreen(turf: turfData, distance: 0.0), // distance can be re-calculated if needed
-                              ),
-                            );
-                          }
-                        },
-                        child: Padding(
-                           padding: EdgeInsets.symmetric(vertical: 8),
-                           child: Row(
-                             children: [
-                               Icon(Icons.location_on, size: 20, color: AppTheme.theme.primaryColor),
-                               SizedBox(width: 10),
-                               Expanded(
-                                  child: Text(
-                                    match!.location, 
-                                    style: TextStyle(color: AppTheme.theme.primaryColor, decoration: TextDecoration.underline),
-                                  ),
-                               ),
-                             ],
-                           )
-                        ),
-                      )
-                    else
-                      _InfoRow(Icons.location_on, match!.location),
+                    _InfoRow(Icons.location_on, match!.location),
                     if (match!.scheduledTime != null)
                       _InfoRow(
                         Icons.calendar_today,
                         '${match!.scheduledTime!.day}/${match!.scheduledTime!.month}/${match!.scheduledTime!.year} ${match!.scheduledTime!.hour}:${match!.scheduledTime!.minute.toString().padLeft(2, '0')}',
                       ),
+                    if (isBookingOwner)
+                      _InfoRow(Icons.access_time, 'Booked Slot: ${matchBooking!.slotTime}'),
                     if (match!.visibility == 'team')
                       _InfoRow(
                         Icons.groups,
@@ -466,6 +743,125 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                 ),
               ),
             ),
+            if (canManageMatch) ...[
+              SizedBox(height: 18),
+              Container(
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      AppTheme.theme.colorScheme.primary.withOpacity(0.10),
+                      Colors.white,
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: AppTheme.theme.colorScheme.primary.withOpacity(0.18),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Manage Match',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    SizedBox(height: 6),
+                    Text(
+                      'You can update only the date and slot, or delete this match.',
+                      style: TextStyle(color: Colors.grey[700]),
+                    ),
+                    SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: matchBooking == null ? null : _showEditMatchDialog,
+                            icon: Icon(Icons.edit_calendar),
+                            label: Text('Edit Match'),
+                            style: OutlinedButton.styleFrom(
+                              padding: EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _deleteCurrentMatch,
+                            icon: Icon(Icons.delete_outline),
+                            label: Text('Delete Match'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              foregroundColor: Colors.white,
+                              padding: EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (isBookingOwner && effectiveStatus != 'completed') ...[
+              SizedBox(height: 20),
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Booking Slots',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 10),
+                      Text(
+                        'Your booked slot: ${matchBooking!.slotTime}',
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                      ),
+                      SizedBox(height: 12),
+                      Text(
+                        'Other available slots for ${match!.gameType}:',
+                        style: TextStyle(color: Colors.grey[700]),
+                      ),
+                      SizedBox(height: 10),
+                      if (availableSlotsForBooking.isEmpty)
+                        Text(
+                          'No other slots are available for this date right now.',
+                          style: TextStyle(color: Colors.grey[600]),
+                        )
+                      else
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: availableSlotsForBooking.map((slot) {
+                            return Chip(label: Text(slot));
+                          }).toList(),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             SizedBox(height: 20),
 
             // Join/Form Teams Buttons
@@ -490,7 +886,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                 ),
               ),
 
-            if (isPlayer && !isCreator && match!.matchStatus == 'pending')
+            if (isPlayer && !isCreator && effectiveStatus == 'pending')
               ElevatedButton(
                 onPressed: _leaveMatch,
                 style: ElevatedButton.styleFrom(
@@ -566,7 +962,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
               ),
 
               // Toss Section
-              if (match!.tossResult == null && isCreator && match!.matchStatus == 'pending')
+              if (match!.tossResult == null && isCreator && effectiveStatus == 'pending')
                 Padding(
                   padding: EdgeInsets.only(top: 20),
                   child: ElevatedButton(
@@ -591,7 +987,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                 ),
 
               // Complete Match Button
-              if (isCreator && match!.matchStatus == 'active')
+              if (isCreator && effectiveStatus == 'active')
                 Padding(
                   padding: EdgeInsets.only(top: 20),
                   child: ElevatedButton(
@@ -624,7 +1020,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                     child: Column(
                       children: [
                         Text(
-                          'Toss Result',
+                          '${match!.gameType} Toss Result',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -632,7 +1028,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                         ),
                         SizedBox(height: 10),
                         Text(
-                          '${match!.tossResult!['winner'] == 'teamA' ? 'Team A' : 'Team B'} won the toss and chose to ${match!.tossResult!['choice']}',
+                          'In this ${match!.gameType} game, ${match!.tossResult!['winner'] == 'teamA' ? 'Team A' : 'Team B'} won the toss and chose to ${match!.tossResult!['choice']}',
                           style: TextStyle(fontSize: 16),
                         ),
                       ],
@@ -748,6 +1144,65 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
       default:
         return Colors.grey;
     }
+  }
+
+  Future<List<String>> _loadAvailableSlots(MatchModel matchData) async {
+    if (matchBooking == null || matchTurf == null) {
+      return [];
+    }
+
+    final turfBookings = await _firestoreService.getTurfBookings(matchData.turfId);
+    final bookingDate = matchBooking!.bookingDate;
+    final bookedSlot = _normalizeSlotTime(matchBooking!.slotTime);
+    final totalCourts = matchTurf!.courts[matchData.gameType] ?? 1;
+
+    return _allSlots.where((slot) {
+      final normalizedSlot = _normalizeSlotTime(slot);
+      if (normalizedSlot == bookedSlot) {
+        return false;
+      }
+
+      final bookedCount = turfBookings.where((booking) {
+        return booking.status != 'cancelled' &&
+            booking.gameType == matchData.gameType &&
+            _isSameDay(booking.bookingDate, bookingDate) &&
+            _normalizeSlotTime(booking.slotTime) == normalizedSlot;
+      }).length;
+
+      return bookedCount < totalCourts;
+    }).toList();
+  }
+
+  bool _isSameDay(DateTime first, DateTime second) {
+    return first.year == second.year &&
+        first.month == second.month &&
+        first.day == second.day;
+  }
+
+  String _normalizeSlotTime(String slotTime) {
+    final parts = slotTime.split('-');
+    if (parts.length != 2) {
+      return slotTime.trim();
+    }
+
+    final start = _normalizeTimeLabel(parts[0]);
+    final end = _normalizeTimeLabel(parts[1]);
+    return '$start - $end';
+  }
+
+  String _normalizeTimeLabel(String value) {
+    final match = RegExp(r'^\s*(\d{1,2}):(\d{2})\s*$').firstMatch(value);
+    if (match == null) {
+      return value.trim();
+    }
+
+    final hour = int.tryParse(match.group(1) ?? '');
+    final minute = int.tryParse(match.group(2) ?? '');
+    if (hour == null || minute == null) {
+      return value.trim();
+    }
+
+    return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
   }
 }
 

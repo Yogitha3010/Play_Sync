@@ -32,8 +32,8 @@ class MatchmakingService {
   Future<List<PlayerProfileModel>> findMatchingPlayers({
     required String currentPlayerId,
     required String gameType,
-    required double maxDistance, // in km
     required int maxResults,
+    double? maxDistance, // in km
     double? skillLevelTolerance,
   }) async {
     try {
@@ -68,8 +68,9 @@ class MatchmakingService {
         double skillScore = 1.0 - (skillDiff / skillTolerance).clamp(0.0, 1.0);
         compatibilityScore += skillScore * 0.4;
 
-        // Location proximity (30% weight)
-        if (currentPlayer.location.isNotEmpty &&
+        // Location proximity (30% weight) when a distance filter is provided
+        if (maxDistance != null &&
+            currentPlayer.location.isNotEmpty &&
             player.location.isNotEmpty) {
           double distance = calculateDistance(
             currentPlayer.location['latitude'] ?? 0.0,
@@ -85,7 +86,7 @@ class MatchmakingService {
             continue; // Skip players outside max distance
           }
         } else {
-          // If location not available, give neutral score
+          // If no distance filter is provided, or location is unavailable, give neutral score
           compatibilityScore += 0.15;
         }
 

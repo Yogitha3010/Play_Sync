@@ -19,4 +19,6 @@ class FirebaseService {
   static CollectionReference get chatsCollection => firestore.collection('chats');
   static CollectionReference get teamsCollection => firestore.collection('teams');
   static CollectionReference get bookingsCollection => firestore.collection('bookings');
+  static CollectionReference get bookingSlotsCollection =>
+      firestore.collection('bookingSlots');
 }

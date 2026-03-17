@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../services/matchmaking_service.dart';
-import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../models/player_profile_model.dart';
 import '../theme/app_theme.dart';
@@ -15,8 +14,7 @@ class _FindPlayersScreenState extends State<FindPlayersScreen> {
   bool isLoading = false;
   List<PlayerProfileModel> matchingPlayers = [];
   String selectedGame = 'Cricket';
-  double maxDistance = 10.0; // km
-  final List<String> games = ['Cricket', 'Badminton', 'Pickleball', 'Football', 'Basketball', 'Tennis'];
+  final List<String> games = ['Cricket', 'Badminton', 'Pickleball', 'Football', 'Basketball', 'Tennis', 'Volleyball'];
 
   final MatchmakingService _matchmakingService = MatchmakingService();
   final AuthService _authService = AuthService();
@@ -37,7 +35,6 @@ class _FindPlayersScreenState extends State<FindPlayersScreen> {
       final players = await _matchmakingService.findMatchingPlayers(
         currentPlayerId: currentUser.uid,
         gameType: selectedGame,
-        maxDistance: maxDistance,
         maxResults: 20,
       );
 
@@ -67,54 +64,26 @@ class _FindPlayersScreenState extends State<FindPlayersScreen> {
           Container(
             padding: EdgeInsets.all(15),
             color: Colors.grey[100],
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        value: selectedGame,
-                        decoration: InputDecoration(
-                          labelText: 'Sport',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        items: games.map((game) {
-                          return DropdownMenuItem(
-                            value: game,
-                            child: Text(game),
-                          );
-                        }).toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() => selectedGame = value);
-                            _findPlayers();
-                          }
-                        },
-                      ),
-                    ),
-                    SizedBox(width: 10),
-                    Expanded(
-                      child: Slider(
-                        value: maxDistance,
-                        min: 5.0,
-                        max: 50.0,
-                        divisions: 9,
-                        label: '${maxDistance.toInt()} km',
-                        onChanged: (value) {
-                          setState(() => maxDistance = value);
-                        },
-                        onChangeEnd: (value) {
-                          _findPlayers();
-                        },
-                      ),
-                    ),
-                  ],
+            child: DropdownButtonFormField<String>(
+              value: selectedGame,
+              decoration: InputDecoration(
+                labelText: 'Sport',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                SizedBox(height: 10),
-                Text('Max Distance: ${maxDistance.toInt()} km'),
-              ],
+              ),
+              items: games.map((game) {
+                return DropdownMenuItem(
+                  value: game,
+                  child: Text(game),
+                );
+              }).toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() => selectedGame = value);
+                  _findPlayers();
+                }
+              },
             ),
           ),
 
@@ -229,24 +198,6 @@ class _PlayerCard extends StatelessWidget {
                         Text('${player.gamesPlayed} games'),
                       ],
                     ),
-                    SizedBox(height: 5),
-                    if (player.locationAddress != null)
-                      Row(
-                        children: [
-                          Icon(Icons.location_on, size: 14, color: Colors.grey),
-                          SizedBox(width: 5),
-                          Expanded(
-                            child: Text(
-                              player.locationAddress!,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[600],
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
                     SizedBox(height: 5),
                     Wrap(
                       spacing: 5,

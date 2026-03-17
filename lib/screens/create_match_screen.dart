@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
-import '../services/matchmaking_service.dart';
 import '../models/match_model.dart';
-import '../models/player_profile_model.dart';
 import '../models/turf_model.dart';
 import '../models/booking_model.dart';
 import '../models/team_model.dart';
@@ -25,11 +23,25 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
 
   final _formKey = GlobalKey<FormState>();
   final maxPlayersController = TextEditingController(text: '10');
+  final List<String> _allSlots = const [
+    '06:00 - 07:00',
+    '07:00 - 08:00',
+    '08:00 - 09:00',
+    '16:00 - 17:00',
+    '17:00 - 18:00',
+    '18:00 - 19:00',
+    '19:00 - 20:00',
+    '20:00 - 21:00',
+    '21:00 - 22:00',
+  ];
 
   String selectedGame = 'Cricket';
   TurfModel? selectedTurf;
   List<TurfModel> availableTurfs = [];
+  List<BookingModel> turfBookings = [];
 
+  DateTime? selectedDate;
+  String? selectedSlot;
   DateTime? scheduledTime;
   int maxPlayers = 10;
 
@@ -57,9 +69,17 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
     setState(() => isLoading = true);
     try {
       final turfs = await _firestoreService.searchTurfs(gameType: gameType);
+      final initialTurf = turfs.isNotEmpty ? turfs.first : null;
+      final initialBookings = initialTurf != null
+          ? await _firestoreService.getTurfBookings(initialTurf.turfId)
+          : <BookingModel>[];
       setState(() {
         availableTurfs = turfs;
-        selectedTurf = turfs.isNotEmpty ? turfs.first : null;
+        selectedTurf = initialTurf;
+        turfBookings = initialBookings;
+        selectedDate = null;
+        selectedSlot = null;
+        scheduledTime = null;
       });
     } catch (e) {
       ScaffoldMessenger.of(
@@ -82,9 +102,31 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
       return;
     }
 
+    if (selectedDate == null || selectedSlot == null || scheduledTime == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Please select a booking date and available slot')),
+      );
+      return;
+    }
+
     setState(() => isLoading = true);
 
     try {
+      await _refreshBookingsForCurrentTurf(keepSelection: true);
+      final latestAvailableSlots = _getAvailableSlots();
+      if (selectedSlot == null || !latestAvailableSlots.contains(selectedSlot)) {
+        setState(() {
+          selectedSlot = null;
+          scheduledTime = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('That slot was just booked. Please choose another available slot.'),
+          ),
+        );
+        return;
+      }
+
       final currentUser = _authService.currentUser;
       if (currentUser == null) return;
 
@@ -104,8 +146,6 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
         teamId: widget.team?.teamId,
       );
 
-      await _firestoreService.createMatch(match);
-
       // Create booking for the match
       final turf = await _firestoreService.getTurf(match.turfId);
       if (turf != null && match.scheduledTime != null) {
@@ -117,16 +157,20 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
           matchId: match.matchId,
           gameType: selectedGame,
           bookingDate: DateTime(
-            match.scheduledTime!.year,
-            match.scheduledTime!.month,
-            match.scheduledTime!.day,
+            selectedDate!.year,
+            selectedDate!.month,
+            selectedDate!.day,
           ),
-          slotTime:
-              '${match.scheduledTime!.hour}:${match.scheduledTime!.minute.toString().padLeft(2, '0')} - ${match.scheduledTime!.hour + 1}:${match.scheduledTime!.minute.toString().padLeft(2, '0')}',
+          slotTime: selectedSlot!,
           createdAt: DateTime.now(),
         );
-        await _firestoreService.createBooking(booking);
+        await _firestoreService.createBooking(
+          booking,
+          maxBookingsPerSlot: turf.courts[selectedGame] ?? 1,
+        );
       }
+
+      await _firestoreService.createMatch(match);
 
       if (mounted) {
         Navigator.pushReplacement(
@@ -136,6 +180,10 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
           ),
         );
       }
+    } on BookingConflictException catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       ScaffoldMessenger.of(
         context,
@@ -147,32 +195,163 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
     }
   }
 
-  Future<void> _selectDateTime() async {
+  Future<void> _selectDate() async {
     final DateTime? pickedDate = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
+      initialDate: selectedDate ?? DateTime.now(),
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(Duration(days: 365)),
     );
 
     if (pickedDate != null) {
-      final TimeOfDay? pickedTime = await showTimePicker(
-        context: context,
-        initialTime: TimeOfDay.now(),
-      );
-
-      if (pickedTime != null) {
-        setState(() {
-          scheduledTime = DateTime(
-            pickedDate.year,
-            pickedDate.month,
-            pickedDate.day,
-            pickedTime.hour,
-            pickedTime.minute,
-          );
-        });
-      }
+      setState(() {
+        selectedDate = pickedDate;
+        selectedSlot = null;
+        scheduledTime = null;
+      });
+      await _refreshBookingsForCurrentTurf(keepSelection: true);
     }
+  }
+
+  Future<void> _loadBookingsForSelectedTurf(TurfModel? turf) async {
+    if (turf == null) {
+      setState(() {
+        turfBookings = [];
+        selectedDate = null;
+        selectedSlot = null;
+        scheduledTime = null;
+      });
+      return;
+    }
+
+    final bookings = await _firestoreService.getTurfBookings(turf.turfId);
+    if (!mounted) return;
+    setState(() {
+      selectedTurf = turf;
+      turfBookings = bookings;
+      selectedDate = null;
+      selectedSlot = null;
+      scheduledTime = null;
+    });
+  }
+
+  Future<void> _refreshBookingsForCurrentTurf({
+    bool keepSelection = false,
+  }) async {
+    if (selectedTurf == null) return;
+
+    final bookings = await _firestoreService.getTurfBookings(selectedTurf!.turfId);
+    if (!mounted) return;
+
+    setState(() {
+      turfBookings = bookings;
+      if (!keepSelection) {
+        selectedDate = null;
+        selectedSlot = null;
+        scheduledTime = null;
+      } else if (selectedSlot != null && _getRemainingCapacity(selectedSlot!) <= 0) {
+        selectedSlot = null;
+        scheduledTime = null;
+      }
+    });
+  }
+
+  List<String> _getAvailableSlots() {
+    if (selectedDate == null || selectedTurf == null) {
+      return [];
+    }
+
+    return _allSlots.where((slot) {
+      return _isSlotInFuture(slot) && _getRemainingCapacity(slot) > 0;
+    }).toList();
+  }
+
+  int _getRemainingCapacity(String slotTime) {
+    if (selectedDate == null || selectedTurf == null) {
+      return 0;
+    }
+
+    final normalizedSlot = _normalizeSlotTime(slotTime);
+    final totalCourts = selectedTurf!.courts[selectedGame] ?? 1;
+    final bookedCount = turfBookings.where((booking) {
+      return booking.status != 'cancelled' &&
+          booking.gameType == selectedGame &&
+          _isSameDay(booking.bookingDate, selectedDate!) &&
+          _normalizeSlotTime(booking.slotTime) == normalizedSlot;
+    }).length;
+
+    final remaining = totalCourts - bookedCount;
+    return remaining > 0 ? remaining : 0;
+  }
+
+  void _updateScheduledTimeFromSelection() {
+    if (selectedDate == null || selectedSlot == null) {
+      scheduledTime = null;
+      return;
+    }
+
+    final parts = _normalizeSlotTime(selectedSlot!).split(' - ');
+    final timeParts = parts.first.split(':');
+    final hour = int.parse(timeParts[0]);
+    final minute = int.parse(timeParts[1]);
+
+    scheduledTime = DateTime(
+      selectedDate!.year,
+      selectedDate!.month,
+      selectedDate!.day,
+      hour,
+      minute,
+    );
+  }
+
+  bool _isSlotInFuture(String slotTime) {
+    if (selectedDate == null) {
+      return false;
+    }
+
+    final parts = _normalizeSlotTime(slotTime).split(' - ');
+    final start = parts.first.split(':');
+    final slotStart = DateTime(
+      selectedDate!.year,
+      selectedDate!.month,
+      selectedDate!.day,
+      int.parse(start[0]),
+      int.parse(start[1]),
+    );
+
+    return slotStart.isAfter(DateTime.now());
+  }
+
+  bool _isSameDay(DateTime first, DateTime second) {
+    return first.year == second.year &&
+        first.month == second.month &&
+        first.day == second.day;
+  }
+
+  String _normalizeSlotTime(String slotTime) {
+    final parts = slotTime.split('-');
+    if (parts.length != 2) {
+      return slotTime.trim();
+    }
+
+    final start = _normalizeTimeLabel(parts[0]);
+    final end = _normalizeTimeLabel(parts[1]);
+    return '$start - $end';
+  }
+
+  String _normalizeTimeLabel(String value) {
+    final match = RegExp(r'^\s*(\d{1,2}):(\d{2})\s*$').firstMatch(value);
+    if (match == null) {
+      return value.trim();
+    }
+
+    final hour = int.tryParse(match.group(1) ?? '');
+    final minute = int.tryParse(match.group(2) ?? '');
+    if (hour == null || minute == null) {
+      return value.trim();
+    }
+
+    return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
   }
 
   @override
@@ -183,6 +362,12 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final availableSlots = _getAvailableSlots();
+    if (selectedSlot != null && !availableSlots.contains(selectedSlot)) {
+      selectedSlot = null;
+      scheduledTime = null;
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Create Match'),
@@ -259,6 +444,10 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
                           setState(() {
                             selectedGame = value;
                             selectedTurf = null;
+                            turfBookings = [];
+                            selectedDate = null;
+                            selectedSlot = null;
+                            scheduledTime = null;
                           });
                           _loadTurfsForGame(value);
                         }
@@ -290,7 +479,7 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
                   );
                 }).toList(),
                 onChanged: (value) {
-                  setState(() => selectedTurf = value);
+                  _loadBookingsForSelectedTurf(value);
                 },
                 validator: (value) =>
                     value == null ? 'Please select a Turf location' : null,
@@ -322,19 +511,19 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
               ),
               SizedBox(height: 20),
 
-              // Scheduled Time
+              // Booking Date
               Text(
-                'Scheduled Time (Optional)',
+                'Booking Date *',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               SizedBox(height: 10),
               ElevatedButton.icon(
-                onPressed: _selectDateTime,
+                onPressed: selectedTurf == null ? null : _selectDate,
                 icon: Icon(Icons.calendar_today),
                 label: Text(
-                  scheduledTime == null
-                      ? 'Select Date & Time'
-                      : '${scheduledTime!.day}/${scheduledTime!.month}/${scheduledTime!.year} ${scheduledTime!.hour}:${scheduledTime!.minute.toString().padLeft(2, '0')}',
+                  selectedDate == null
+                      ? 'Select Booking Date'
+                      : '${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}',
                 ),
                 style: ElevatedButton.styleFrom(
                   padding: EdgeInsets.symmetric(vertical: 15),
@@ -343,6 +532,71 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
                   ),
                 ),
               ),
+              SizedBox(height: 20),
+
+              Text(
+                'Available Time Slot *',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 10),
+              if (selectedDate == null)
+                Container(
+                  padding: EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey[300]!),
+                  ),
+                  child: Text('Select a booking date to see available slots'),
+                )
+              else if (availableSlots.isEmpty)
+                Container(
+                  padding: EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.orange.shade200),
+                  ),
+                  child: Text(
+                    'No slots available for this Date .',
+                    style: TextStyle(color: Colors.orange.shade900),
+                  ),
+                )
+              else
+                DropdownButtonFormField<String>(
+                  value: selectedSlot,
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: Icon(Icons.access_time),
+                  ),
+                  items: availableSlots.map((slot) {
+                    final remainingCourts = _getRemainingCapacity(slot);
+                    final label = remainingCourts > 1
+                        ? '$slot ($remainingCourts courts left)'
+                        : slot;
+                    return DropdownMenuItem(
+                      value: slot,
+                      child: Text(label),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      selectedSlot = value;
+                      _updateScheduledTimeFromSelection();
+                    });
+                  },
+                  validator: (value) =>
+                      value == null ? 'Please select an available slot' : null,
+                ),
+              if (scheduledTime != null) ...[
+                SizedBox(height: 10),
+                Text(
+                  'Match will be scheduled for ${scheduledTime!.day}/${scheduledTime!.month}/${scheduledTime!.year} ${selectedSlot!}',
+                  style: TextStyle(color: Colors.grey[700]),
+                ),
+              ],
               SizedBox(height: 30),
 
               // Create Button

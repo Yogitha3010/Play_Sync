@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../models/match_model.dart';
+import '../models/booking_model.dart';
 import '../theme/app_theme.dart';
 import 'match_detail_screen.dart';
 
@@ -13,6 +14,7 @@ class MyMatchesScreen extends StatefulWidget {
 class _MyMatchesScreenState extends State<MyMatchesScreen> {
   bool isLoading = true;
   List<MatchModel> matches = [];
+  Map<String, BookingModel?> bookingsByMatchId = {};
   String selectedFilter = 'all'; // all, pending, active, completed
 
   final FirestoreService _firestoreService = FirestoreService();
@@ -32,9 +34,20 @@ class _MyMatchesScreenState extends State<MyMatchesScreen> {
       if (currentUser == null) return;
 
       final allMatches = await _firestoreService.getPlayerMatches(currentUser.uid);
+      final matchBookings = await Future.wait(
+        allMatches.map(
+          (match) async => MapEntry(
+            match.matchId,
+            await _firestoreService.getMatchBooking(match.matchId),
+          ),
+        ),
+      );
       
       setState(() {
         matches = allMatches;
+        bookingsByMatchId = {
+          for (final entry in matchBookings) entry.key: entry.value,
+        };
         isLoading = false;
       });
     } catch (e) {
@@ -139,6 +152,7 @@ class _MyMatchesScreenState extends State<MyMatchesScreen> {
                             final match = filteredMatches[index];
                             return _MatchCard(
                               match: match,
+                              booking: bookingsByMatchId[match.matchId],
                               onTap: () {
                                 Navigator.push(
                                   context,
@@ -195,10 +209,12 @@ class _FilterChip extends StatelessWidget {
 
 class _MatchCard extends StatelessWidget {
   final MatchModel match;
+  final BookingModel? booking;
   final VoidCallback onTap;
 
   const _MatchCard({
     required this.match,
+    required this.booking,
     required this.onTap,
   });
 
@@ -253,27 +269,34 @@ class _MatchCard extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    match.gameType,
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: _getStatusColor(effectiveStatus).withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(15),
-                    ),
+                  Expanded(
                     child: Text(
-                      effectiveStatus.toUpperCase(),
+                      match.gameType,
                       style: TextStyle(
-                        color: _getStatusColor(effectiveStatus),
+                        fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        fontSize: 12,
                       ),
                     ),
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: _getStatusColor(effectiveStatus).withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                        child: Text(
+                          effectiveStatus.toUpperCase(),
+                          style: TextStyle(
+                            color: _getStatusColor(effectiveStatus),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -307,6 +330,19 @@ class _MatchCard extends StatelessWidget {
                   ),
                 ],
               ),
+              if (booking != null) ...[
+                SizedBox(height: 10),
+                Row(
+                  children: [
+                    Icon(Icons.access_time, size: 16, color: Colors.grey),
+                    SizedBox(width: 5),
+                    Text(
+                      'Booked slot: ${booking!.slotTime}',
+                      style: TextStyle(color: Colors.grey[700]),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
