@@ -20,6 +20,12 @@ class _TurfOwnerBookingsScreenState extends State<TurfOwnerBookingsScreen> {
   List<TurfModel> _myTurfs = [];
   Map<String, List<BookingModel>> _turfBookings = {};
 
+  /// Cache of playerId → display name
+  final Map<String, String> _playerNames = {};
+
+  /// Cache of matchId → list of player IDs in that match
+  final Map<String, List<String>> _matchPlayers = {};
+
   @override
   void initState() {
     super.initState();
@@ -51,8 +57,50 @@ class _TurfOwnerBookingsScreenState extends State<TurfOwnerBookingsScreen> {
         }
         bookingsMap[booking.turfId]!.add(booking);
       }
-
       _turfBookings = bookingsMap;
+
+      // 4. Fetch matches for bookings that have a matchId
+      final matchIds = allBookings
+          .where((b) => b.matchId != null && b.matchId!.isNotEmpty)
+          .map((b) => b.matchId!)
+          .toSet();
+
+      if (matchIds.isNotEmpty) {
+        final matchResults = await Future.wait(
+          matchIds.map((id) => _firestoreService.getMatch(id)),
+        );
+        for (final match in matchResults) {
+          if (match != null) {
+            _matchPlayers[match.matchId] = List<String>.from(match.players);
+          }
+        }
+      }
+
+      // 5. Collect all unique player IDs to resolve names
+      final allPlayerIds = <String>{};
+      for (final booking in allBookings) {
+        allPlayerIds.add(booking.playerId);
+      }
+      for (final playerList in _matchPlayers.values) {
+        allPlayerIds.addAll(playerList);
+      }
+
+      // 6. Fetch profiles in parallel
+      final idList = allPlayerIds.toList();
+      final profileResults = await Future.wait(
+        idList.map((id) => _firestoreService.getPlayerProfile(id)),
+      );
+      for (int i = 0; i < idList.length; i++) {
+        final profile = profileResults[i];
+        if (profile != null) {
+          final name = (profile.name ?? '').trim().isNotEmpty
+              ? profile.name!.trim()
+              : (profile.username ?? '').trim().isNotEmpty
+                  ? profile.username!.trim()
+                  : 'Player';
+          _playerNames[idList[i]] = name;
+        }
+      }
     } catch (e) {
       ScaffoldMessenger.of(
         context,
@@ -62,7 +110,15 @@ class _TurfOwnerBookingsScreenState extends State<TurfOwnerBookingsScreen> {
     }
   }
 
+  String _nameFor(String playerId) =>
+      _playerNames[playerId] ?? 'Unknown Player';
+
   Widget _buildBookingCard(BookingModel booking, TurfModel turf) {
+    final bookerName = _nameFor(booking.playerId);
+    final matchPlayerIds = booking.matchId != null
+        ? (_matchPlayers[booking.matchId!] ?? [])
+        : <String>[];
+
     return Card(
       margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -72,6 +128,7 @@ class _TurfOwnerBookingsScreenState extends State<TurfOwnerBookingsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Date + Status
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -97,6 +154,8 @@ class _TurfOwnerBookingsScreenState extends State<TurfOwnerBookingsScreen> {
               ],
             ),
             SizedBox(height: 12),
+
+            // Slot
             Row(
               children: [
                 Icon(Icons.access_time, size: 18, color: Colors.blueGrey),
@@ -105,6 +164,8 @@ class _TurfOwnerBookingsScreenState extends State<TurfOwnerBookingsScreen> {
               ],
             ),
             SizedBox(height: 8),
+
+            // Game
             Row(
               children: [
                 Icon(Icons.sports, size: 18, color: Colors.blueGrey),
@@ -112,28 +173,80 @@ class _TurfOwnerBookingsScreenState extends State<TurfOwnerBookingsScreen> {
                 Text(booking.gameType, style: TextStyle(fontSize: 15)),
               ],
             ),
-            if (booking.matchId != null) ...[
-              SizedBox(height: 8),
+            SizedBox(height: 12),
+            Divider(),
+            SizedBox(height: 8),
+
+            // Booker name
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.person, size: 18, color: AppTheme.theme.primaryColor),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Booked by: $bookerName',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            // Match players (if linked to a match)
+            if (matchPlayerIds.isNotEmpty) ...[
+              SizedBox(height: 10),
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.group, size: 18, color: Colors.blueGrey),
+                  Icon(Icons.group, size: 18, color: AppTheme.theme.primaryColor),
                   SizedBox(width: 8),
-                  Text(
-                    'Match ID: ${booking.matchId}',
-                    style: TextStyle(fontSize: 15),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Match Players (${matchPlayerIds.length}):',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: matchPlayerIds.map((id) {
+                            return Chip(
+                              avatar: CircleAvatar(
+                                backgroundColor: AppTheme.theme.primaryColor,
+                                child: Text(
+                                  _nameFor(id).substring(0, 1).toUpperCase(),
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                              label: Text(
+                                _nameFor(id),
+                                style: TextStyle(fontSize: 12),
+                              ),
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                              padding: EdgeInsets.symmetric(horizontal: 4),
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ],
-            SizedBox(height: 12),
-            Divider(),
-            SizedBox(height: 8),
-            Text(
-              'Player ID: ${booking.playerId}',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
           ],
         ),
       ),
