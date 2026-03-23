@@ -17,10 +17,11 @@ class EditPlayerProfileScreen extends StatefulWidget {
 class _EditPlayerProfileScreenState extends State<EditPlayerProfileScreen> {
   bool isLoading = false;
   final _formKey = GlobalKey<FormState>();
-  final skillLevelController = TextEditingController();
+  final nameController = TextEditingController();
+  final usernameController = TextEditingController();
+  final locationController = TextEditingController();
 
   List<String> selectedSports = [];
-  double skillLevel = 5.0;
 
   final List<String> availableSports = [
     'Cricket',
@@ -38,8 +39,9 @@ class _EditPlayerProfileScreenState extends State<EditPlayerProfileScreen> {
   void initState() {
     super.initState();
     selectedSports = List.from(widget.profile.preferredSports);
-    skillLevel = widget.profile.skillLevel;
-    skillLevelController.text = skillLevel.toStringAsFixed(1);
+    nameController.text = widget.profile.name ?? '';
+    usernameController.text = widget.profile.username ?? '';
+    locationController.text = widget.profile.locationAddress ?? '';
   }
 
   Future<void> _saveProfile() async {
@@ -50,9 +52,16 @@ class _EditPlayerProfileScreenState extends State<EditPlayerProfileScreen> {
     setState(() => isLoading = true);
 
     try {
+      await _firestoreService.updateUsername(
+        userId: widget.profile.userId,
+        username: usernameController.text.trim(),
+        name: nameController.text.trim(),
+      );
       await _firestoreService.updatePlayerProfile(widget.profile.userId, {
+        'name': nameController.text.trim(),
         'preferredSports': selectedSports,
-        'skillLevel': skillLevel,
+        'preferredGames': selectedSports,
+        'locationAddress': locationController.text.trim(),
       });
 
       ScaffoldMessenger.of(
@@ -73,7 +82,9 @@ class _EditPlayerProfileScreenState extends State<EditPlayerProfileScreen> {
 
   @override
   void dispose() {
-    skillLevelController.dispose();
+    nameController.dispose();
+    usernameController.dispose();
+    locationController.dispose();
     super.dispose();
   }
 
@@ -97,6 +108,58 @@ class _EditPlayerProfileScreenState extends State<EditPlayerProfileScreen> {
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
               SizedBox(height: 30),
+
+              TextFormField(
+                controller: nameController,
+                decoration: InputDecoration(
+                  labelText: 'Name',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  prefixIcon: Icon(Icons.person_outline),
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Name is required';
+                  }
+                  return null;
+                },
+              ),
+              SizedBox(height: 20),
+
+              TextFormField(
+                controller: usernameController,
+                decoration: InputDecoration(
+                  labelText: 'Username',
+                  prefixText: '@',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  prefixIcon: Icon(Icons.alternate_email),
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Username is required';
+                  }
+                  if (!RegExp(r'^[a-zA-Z0-9_]{3,20}$').hasMatch(value.trim())) {
+                    return 'Use 3-20 letters, numbers, or _';
+                  }
+                  return null;
+                },
+              ),
+              SizedBox(height: 20),
+
+              TextFormField(
+                controller: locationController,
+                decoration: InputDecoration(
+                  labelText: 'Location',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  prefixIcon: Icon(Icons.location_on_outlined),
+                ),
+              ),
+              SizedBox(height: 20),
 
               // Preferred Sports
               Text(

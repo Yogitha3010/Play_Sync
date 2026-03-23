@@ -4,8 +4,8 @@ import '../models/turf_model.dart';
 import '../models/booking_model.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
+import '../services/slot_service.dart';
 import '../theme/app_theme.dart';
-import 'create_match_screen.dart';
 
 class TurfDetailScreen extends StatefulWidget {
   final TurfModel turf;
@@ -21,17 +21,6 @@ class TurfDetailScreen extends StatefulWidget {
 class _TurfDetailScreenState extends State<TurfDetailScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
-  final List<String> _allSlots = const [
-    '06:00 - 07:00',
-    '07:00 - 08:00',
-    '08:00 - 09:00',
-    '16:00 - 17:00',
-    '17:00 - 18:00',
-    '18:00 - 19:00',
-    '19:00 - 20:00',
-    '20:00 - 21:00',
-    '21:00 - 22:00',
-  ];
 
   Future<void> _showBookingSheet(BuildContext context) async {
     DateTime? selectedDate = DateTime.now();
@@ -359,6 +348,17 @@ class _TurfDetailScreenState extends State<TurfDetailScreen> {
                   ],
 
                   SizedBox(height: 24),
+                  Text(
+                    'Hours',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    '${SlotService.formatDisplayTime(widget.turf.openingTime)} - ${SlotService.formatDisplayTime(widget.turf.closingTime)}',
+                    style: TextStyle(color: Colors.grey[700], fontSize: 16),
+                  ),
+
+                  SizedBox(height: 24),
                   Divider(),
                   SizedBox(height: 16),
 
@@ -466,7 +466,12 @@ class _TurfDetailScreenState extends State<TurfDetailScreen> {
       return [];
     }
 
-    return _allSlots.where((slot) {
+    final generatedSlots = SlotService.generateSlots(
+      widget.turf.openingTime,
+      widget.turf.closingTime,
+    );
+
+    return generatedSlots.where((slot) {
       return _getRemainingCapacity(
             bookings: bookings,
             selectedDate: selectedDate,

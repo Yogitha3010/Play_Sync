@@ -4,9 +4,11 @@ import 'package:google_sign_in/google_sign_in.dart';
 import '../models/user_model.dart';
 import '../models/player_profile_model.dart';
 import 'firebase_service.dart';
+import 'firestore_service.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirestoreService _firestoreService = FirestoreService();
 
   // Get current user
   User? get currentUser => _auth.currentUser;
@@ -19,9 +21,21 @@ class AuthService {
     required String email,
     required String password,
     required String name,
+    required String username,
     String? phone,
   }) async {
     try {
+      final trimmedUsername = username.trim();
+      final normalizedUsername = _firestoreService.normalizeUsername(
+        trimmedUsername,
+      );
+      final isAvailable = await _firestoreService.isUsernameAvailable(
+        trimmedUsername,
+      );
+      if (!isAvailable) {
+        throw Exception('That username is already taken.');
+      }
+
       // Create user in Firebase Auth
       UserCredential userCredential = await _auth
           .createUserWithEmailAndPassword(email: email, password: password);
@@ -37,6 +51,8 @@ class AuthService {
           email: email,
           name: name,
           phone: phone,
+          username: trimmedUsername,
+          usernameLowercase: normalizedUsername,
           createdAt: DateTime.now(),
           profileCompleted: false,
         );
@@ -49,9 +65,13 @@ class AuthService {
         final playerProfile = PlayerProfileModel(
           userId: userCredential.user!.uid,
           name: name,
+          username: trimmedUsername,
+          usernameLowercase: normalizedUsername,
           skillLevel: 5.0,
           gamesPlayed: 0,
-          rating: 0.0,
+          avgRating: 0.0,
+          totalRatings: 0,
+          playedGames: const [],
           preferredSports: [],
           lastUpdated: DateTime.now(),
         );
@@ -155,49 +175,44 @@ class AuthService {
     });
   }
 
+  Future<void> updateUserData(
+    String userId,
+    Map<String, dynamic> updates,
+  ) async {
+    await FirebaseService.usersCollection.doc(userId).update(updates);
+  }
+
   // Google Sign In
   Future<UserCredential?> signInWithGoogle() async {
+    return _signInWithGoogleForRole(role: 'player');
+  }
+
+  Future<UserCredential?> signInWithGoogleAsTurfOwner() async {
+    return _signInWithGoogleForRole(role: 'turfOwner');
+  }
+
+  Future<UserCredential?> _signInWithGoogleForRole({
+    required String role,
+  }) async {
     try {
+      String? fallbackUsernameFromEmail(String? email) {
+        if (email == null || !email.contains('@')) {
+          return null;
+        }
+        return email.split('@').first;
+      }
+
       // For web, use the Firebase JS SDK popup flow for better compatibility.
       if (kIsWeb) {
         final provider = GoogleAuthProvider();
         final userCredential = await _auth.signInWithPopup(provider);
 
         if (userCredential.user != null) {
-          // Create user document if not exists
-          final doc = await FirebaseService.usersCollection
-              .doc(userCredential.user!.uid)
-              .get();
-
-          if (!doc.exists) {
-            final userModel = UserModel(
-              userId: userCredential.user!.uid,
-              role: 'player',
-              email: userCredential.user!.email ?? '',
-              name: userCredential.user!.displayName ?? 'Google User',
-              phone: userCredential.user!.phoneNumber,
-              createdAt: DateTime.now(),
-              profileCompleted: false,
-            );
-
-            await FirebaseService.usersCollection
-                .doc(userCredential.user!.uid)
-                .set(userModel.toMap());
-
-            final playerProfile = PlayerProfileModel(
-              userId: userCredential.user!.uid,
-              name: userCredential.user!.displayName ?? 'Google User',
-              skillLevel: 5.0,
-              gamesPlayed: 0,
-              rating: 0.0,
-              preferredSports: [],
-              lastUpdated: DateTime.now(),
-            );
-
-            await FirebaseService.playerProfilesCollection
-                .doc(userCredential.user!.uid)
-                .set(playerProfile.toMap());
-          }
+          await _ensureGoogleUserRecord(
+            user: userCredential.user!,
+            role: role,
+            fallbackUsernameFromEmail: fallbackUsernameFromEmail,
+          );
         }
 
         return userCredential;
@@ -219,46 +234,69 @@ class AuthService {
       );
 
       if (userCredential.user != null) {
-        // Check if user document already exists
-        final doc = await FirebaseService.usersCollection
-            .doc(userCredential.user!.uid)
-            .get();
-
-        if (!doc.exists) {
-          // New User via Google - Create standard player document
-          final userModel = UserModel(
-            userId: userCredential.user!.uid,
-            role: 'player', // Default to player for Google sign in
-            email: userCredential.user!.email ?? '',
-            name: userCredential.user!.displayName ?? 'Google User',
-            phone: userCredential.user!.phoneNumber,
-            createdAt: DateTime.now(),
-            profileCompleted: false,
-          );
-
-          await FirebaseService.usersCollection
-              .doc(userCredential.user!.uid)
-              .set(userModel.toMap());
-
-          // Create base profile
-          final playerProfile = PlayerProfileModel(
-            userId: userCredential.user!.uid,
-            name: userCredential.user!.displayName ?? 'Google User',
-            skillLevel: 5.0,
-            gamesPlayed: 0,
-            rating: 0.0,
-            preferredSports: [],
-            lastUpdated: DateTime.now(),
-          );
-
-          await FirebaseService.playerProfilesCollection
-              .doc(userCredential.user!.uid)
-              .set(playerProfile.toMap());
-        }
+        await _ensureGoogleUserRecord(
+          user: userCredential.user!,
+          role: role,
+          fallbackUsernameFromEmail: fallbackUsernameFromEmail,
+        );
       }
       return userCredential;
     } catch (e) {
       throw Exception('Google Sign-In failed: $e');
+    }
+  }
+
+  Future<void> _ensureGoogleUserRecord({
+    required User user,
+    required String role,
+    required String? Function(String? email) fallbackUsernameFromEmail,
+  }) async {
+    final doc = await FirebaseService.usersCollection.doc(user.uid).get();
+
+    if (doc.exists) {
+      final existingUser = UserModel.fromMap(doc.data() as Map<String, dynamic>);
+      if (existingUser.role != role) {
+        await logout();
+        throw Exception(
+          'This Google account is already registered as ${existingUser.role}. Please use the correct login.',
+        );
+      }
+      return;
+    }
+
+    final fallbackUsername = fallbackUsernameFromEmail(user.email);
+    final userModel = UserModel(
+      userId: user.uid,
+      role: role,
+      email: user.email ?? '',
+      name: user.displayName ?? 'Google User',
+      phone: user.phoneNumber,
+      username: role == 'player' ? fallbackUsername : null,
+      usernameLowercase: role == 'player' ? fallbackUsername?.toLowerCase() : null,
+      createdAt: DateTime.now(),
+      profileCompleted: false,
+    );
+
+    await FirebaseService.usersCollection.doc(user.uid).set(userModel.toMap());
+
+    if (role == 'player') {
+      final playerProfile = PlayerProfileModel(
+        userId: user.uid,
+        name: user.displayName ?? 'Google User',
+        username: fallbackUsername,
+        usernameLowercase: fallbackUsername?.toLowerCase(),
+        skillLevel: 5.0,
+        gamesPlayed: 0,
+        avgRating: 0.0,
+        totalRatings: 0,
+        playedGames: const [],
+        preferredSports: [],
+        lastUpdated: DateTime.now(),
+      );
+
+      await FirebaseService.playerProfilesCollection
+          .doc(user.uid)
+          .set(playerProfile.toMap());
     }
   }
 }

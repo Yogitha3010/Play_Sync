@@ -140,6 +140,32 @@ class _TurfOwnerBookingsScreenState extends State<TurfOwnerBookingsScreen> {
     );
   }
 
+  Widget _buildGameSection(
+    String gameType,
+    List<BookingModel> bookings,
+    TurfModel turf,
+  ) {
+    return Container(
+      margin: EdgeInsets.only(left: 12, right: 12, bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        childrenPadding: EdgeInsets.only(bottom: 8),
+        leading: Icon(Icons.sports_soccer, color: AppTheme.theme.primaryColor),
+        title: Text(
+          gameType,
+          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+        ),
+        subtitle: Text('${bookings.length} booking${bookings.length == 1 ? '' : 's'}'),
+        children: bookings.map((booking) => _buildBookingCard(booking, turf)).toList(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -171,35 +197,62 @@ class _TurfOwnerBookingsScreenState extends State<TurfOwnerBookingsScreen> {
                 itemBuilder: (context, index) {
                   final turf = _myTurfs[index];
                   final turfBookings = _turfBookings[turf.turfId] ?? [];
+                  final Map<String, List<BookingModel>> bookingsByGame = {};
+
+                  for (final booking in turfBookings) {
+                    bookingsByGame.putIfAbsent(booking.gameType, () => []);
+                    bookingsByGame[booking.gameType]!.add(booking);
+                  }
+
+                  final gameEntries = bookingsByGame.entries.toList()
+                    ..sort((a, b) => a.key.compareTo(b.key));
 
                   if (turfBookings.isEmpty) return SizedBox.shrink();
 
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: EdgeInsets.only(left: 16, top: 20, bottom: 10),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.stadium,
-                              color: AppTheme.theme.primaryColor,
-                            ),
-                            SizedBox(width: 8),
-                            Text(
-                              turf.name,
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
+                  return Container(
+                    margin: EdgeInsets.fromLTRB(16, 16, 16, 0),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black12,
+                          blurRadius: 10,
+                          offset: Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: ExpansionTile(
+                      tilePadding: EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 8,
+                      ),
+                      childrenPadding: EdgeInsets.only(bottom: 10),
+                      leading: Icon(
+                        Icons.stadium,
+                        color: AppTheme.theme.primaryColor,
+                      ),
+                      title: Text(
+                        turf.name,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                      ...turfBookings
-                          .map((booking) => _buildBookingCard(booking, turf))
+                      subtitle: Text(
+                        '${turfBookings.length} booking${turfBookings.length == 1 ? '' : 's'} • Tap to view games',
+                        style: TextStyle(color: Colors.grey[600]),
+                      ),
+                      children: gameEntries
+                          .map(
+                            (entry) => _buildGameSection(
+                              entry.key,
+                              entry.value,
+                              turf,
+                            ),
+                          )
                           .toList(),
-                    ],
+                    ),
                   );
                 },
               ),

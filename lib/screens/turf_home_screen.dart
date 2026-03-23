@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import 'my_turfs_screen.dart';
-import 'role_selection_screen.dart';
-import 'turf_profile_setup_screen.dart';
 import 'turf_owner_bookings_screen.dart';
+import 'turf_profile_screen.dart';
+import 'turf_profile_setup_screen.dart';
 
 class TurfHomeScreen extends StatelessWidget {
   @override
@@ -16,13 +16,11 @@ class TurfHomeScreen extends StatelessWidget {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
-            icon: Icon(Icons.logout),
-            onPressed: () async {
-              final authService = AuthService();
-              await authService.logout();
-              Navigator.pushReplacement(
+            icon: Icon(Icons.person_outline),
+            onPressed: () {
+              Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => RoleSelectionScreen()),
+                MaterialPageRoute(builder: (_) => const TurfProfileScreen()),
               );
             },
           ),

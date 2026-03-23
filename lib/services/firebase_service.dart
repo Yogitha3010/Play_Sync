@@ -14,11 +14,11 @@ class FirebaseService {
       firestore.collection('matches');
   static CollectionReference get feedbackCollection =>
       firestore.collection('feedback');
-  static CollectionReference get achievementsCollection =>
-      firestore.collection('achievements');
   static CollectionReference get chatsCollection => firestore.collection('chats');
   static CollectionReference get teamsCollection => firestore.collection('teams');
   static CollectionReference get bookingsCollection => firestore.collection('bookings');
   static CollectionReference get bookingSlotsCollection =>
       firestore.collection('bookingSlots');
+  static CollectionReference get playRequestsCollection =>
+      firestore.collection('playRequests');
 }

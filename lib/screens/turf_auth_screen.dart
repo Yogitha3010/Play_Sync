@@ -77,6 +77,41 @@ class _TurfLoginScreenState extends State<TurfLoginScreen> {
     }
   }
 
+  Future<void> _handleGoogleSignIn() async {
+    setState(() => isLoading = true);
+
+    try {
+      final userCredential = await _authService.signInWithGoogleAsTurfOwner();
+      if (userCredential == null) {
+        return;
+      }
+
+      final userData = await _authService.getUserData(userCredential.user!.uid);
+      final ownerTurfs = await _firestoreService.getTurfsByOwner(
+        userCredential.user!.uid,
+      );
+
+      if (!mounted) return;
+      final nextScreen =
+          (userData == null || !userData.profileCompleted || ownerTurfs.isEmpty)
+          ? TurfProfileSetupScreen(ownerId: userCredential.user!.uid)
+          : TurfHomeScreen();
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => nextScreen),
+      );
+    } catch (e) {
+      if (mounted) {
+        showMessage(e.toString().replaceAll('Exception: ', ''));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
+    }
+  }
+
   Future<void> _forgotPassword() async {
     final email = emailController.text.trim();
     if (email.isEmpty) {
@@ -242,6 +277,34 @@ class _TurfLoginScreenState extends State<TurfLoginScreen> {
                         fontWeight: FontWeight.w500,
                       ),
                     ),
+                  ),
+                ),
+
+                SizedBox(height: 25),
+
+                OutlinedButton.icon(
+                  onPressed: isLoading ? null : _handleGoogleSignIn,
+                  icon: isLoading
+                      ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(Icons.g_mobiledata, size: 30, color: Colors.red),
+                  label: Text(
+                    'Continue with Google',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    side: BorderSide(color: Colors.grey[400]!),
                   ),
                 ),
 

@@ -6,9 +6,9 @@ import '../models/match_model.dart';
 import '../models/player_profile_model.dart';
 import '../models/booking_model.dart';
 import '../models/turf_model.dart';
+import '../services/slot_service.dart';
 import '../theme/app_theme.dart';
 import 'feedback_screen.dart';
-import '../services/achievement_service.dart';
 import 'chat_screen.dart';
 import '../models/team_model.dart';
 
@@ -29,24 +29,11 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
   Map<String, dynamic>? prediction;
   TeamModel? linkedTeam;
   BookingModel? matchBooking;
-  TurfModel? matchTurf;
-  List<String> availableSlotsForBooking = [];
-  final List<String> _allSlots = const [
-    '06:00 - 07:00',
-    '07:00 - 08:00',
-    '08:00 - 09:00',
-    '16:00 - 17:00',
-    '17:00 - 18:00',
-    '18:00 - 19:00',
-    '19:00 - 20:00',
-    '20:00 - 21:00',
-    '21:00 - 22:00',
-  ];
+  bool _feedbackPromptShown = false;
 
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
   final MatchmakingService _matchmakingService = MatchmakingService();
-  final AchievementService _achievementService = AchievementService();
 
   @override
   void initState() {
@@ -79,8 +66,6 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
       }
 
       matchBooking = await _firestoreService.getMatchBooking(widget.matchId);
-      matchTurf = await _firestoreService.getTurf(matchData.turfId);
-      availableSlotsForBooking = await _loadAvailableSlots(matchData);
 
       // Load player profiles
       await _loadPlayerProfiles();
@@ -89,6 +74,8 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
       if (matchData.teamA.isNotEmpty && matchData.teamB.isNotEmpty) {
         _calculatePrediction();
       }
+
+      await _checkAutoFeedbackNavigation(matchData);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error loading match: $e')),
@@ -231,7 +218,9 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
 
     final random = DateTime.now().millisecondsSinceEpoch % 2;
     final winner = random == 0 ? 'teamA' : 'teamB';
-    final choice = ['bat', 'bowl'][DateTime.now().millisecondsSinceEpoch % 2];
+    final tossChoices = _getTossChoices(match!.gameType);
+    final choice =
+        tossChoices[DateTime.now().millisecondsSinceEpoch % tossChoices.length];
 
     try {
       await _firestoreService.updateMatch(widget.matchId, {
@@ -314,21 +303,27 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
       else winner = 'tie';
 
       for (String playerId in match!.teamA) {
-        if (winner == 'tie') {
-          await _achievementService.incrementGamesPlayed(playerId);
-        } else {
-          await _achievementService.recordMatchResult(playerId: playerId, won: winner == 'teamA');
-        }
+        await _firestoreService.recordMatchResultForPlayer(
+          playerId: playerId,
+          gameType: match!.gameType,
+          won: winner == 'teamA',
+          tied: winner == 'tie',
+        );
       }
 
       for (String playerId in match!.teamB) {
-        if (winner == 'tie') {
-          await _achievementService.incrementGamesPlayed(playerId);
-        } else {
-          await _achievementService.recordMatchResult(playerId: playerId, won: winner == 'teamB');
-        }
+        await _firestoreService.recordMatchResultForPlayer(
+          playerId: playerId,
+          gameType: match!.gameType,
+          won: winner == 'teamB',
+          tied: winner == 'tie',
+        );
       }
 
+      final updatedMatch = await _firestoreService.getMatch(widget.matchId);
+      if (updatedMatch != null) {
+        await _checkAutoFeedbackNavigation(updatedMatch);
+      }
       _loadMatch();
     } catch (e) {
       if (mounted) {
@@ -338,6 +333,59 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
         );
       }
     }
+  }
+
+  Future<void> _checkAutoFeedbackNavigation(MatchModel matchData) async {
+    final currentUser = _authService.currentUser;
+    if (_feedbackPromptShown ||
+        currentUser == null ||
+        !matchData.players.contains(currentUser.uid) ||
+        matchData.matchStatus != 'completed') {
+      return;
+    }
+
+    final hasSubmitted = await _firestoreService.hasSubmittedFeedback(
+      matchId: matchData.matchId,
+      fromUserId: currentUser.uid,
+    );
+
+    if (hasSubmitted || matchData.players.length <= 1 || !mounted) {
+      return;
+    }
+
+    _feedbackPromptShown = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => FeedbackScreen(matchId: matchData.matchId),
+        ),
+      ).then((_) => _loadMatch());
+    });
+  }
+
+  void _openChatScreen() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatScreen(
+          chatRoomId: match!.matchId,
+          chatTitle: 'Match Chat',
+        ),
+      ),
+    );
+  }
+
+  void _openFeedbackScreen() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FeedbackScreen(matchId: match!.matchId),
+      ),
+    ).then((_) => _loadMatch());
   }
 
   String _getEffectiveStatus() {
@@ -407,11 +455,15 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
     );
     DateTime selectedDate = matchBooking!.bookingDate;
     String selectedSlot = _normalizeSlotTime(matchBooking!.slotTime);
+    final generatedSlots = SlotService.generateSlots(
+      turf.openingTime,
+      turf.closingTime,
+    );
 
     List<String> getAvailableSlots() {
       final totalCourts = turf.courts[match!.gameType] ?? 1;
       final currentBookedSlot = _normalizeSlotTime(matchBooking!.slotTime);
-      final slotOptions = List<String>.from(_allSlots);
+      final slotOptions = List<String>.from(generatedSlots);
       if (!slotOptions.contains(currentBookedSlot)) {
         slotOptions.add(currentBookedSlot);
       }
@@ -652,31 +704,26 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
         foregroundColor: Colors.white,
         actions: [
           if (isPlayer || isCreator)
-            IconButton(
-              icon: Icon(Icons.chat),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ChatScreen(
-                      chatRoomId: match!.matchId,
-                      chatTitle: 'Match Chat',
-                    ),
-                  ),
-                );
-              },
+            TextButton(
+              onPressed: _openChatScreen,
+              child: Text(
+                'Chat',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           if (effectiveStatus == 'completed' && isPlayer)
-            IconButton(
-              icon: Icon(Icons.feedback),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => FeedbackScreen(matchId: match!.matchId),
-                  ),
-                );
-              },
+            TextButton(
+              onPressed: _openFeedbackScreen,
+              child: Text(
+                'Feedback',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
         ],
       ),
@@ -741,6 +788,65 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                     _InfoRow(Icons.people, '${match!.players.length}/${match!.maxPlayers} players'),
                   ],
                 ),
+              ),
+            ),
+            SizedBox(height: 16),
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.white,
+                    AppTheme.theme.colorScheme.primary.withOpacity(0.06),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: AppTheme.theme.colorScheme.primary.withOpacity(0.14),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: (isPlayer || isCreator) ? _openChatScreen : null,
+                      icon: Icon(Icons.chat_bubble_outline),
+                      label: Text('Chat'),
+                      style: OutlinedButton.styleFrom(
+                        padding: EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: effectiveStatus == 'completed' && isPlayer
+                          ? _openFeedbackScreen
+                          : null,
+                      icon: Icon(Icons.rate_review_outlined),
+                      label: Text(
+                        effectiveStatus == 'completed'
+                            ? 'Feedback'
+                            : 'After Match',
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.theme.colorScheme.primary,
+                        foregroundColor: Colors.white,
+                        disabledBackgroundColor: Colors.grey.shade300,
+                        disabledForegroundColor: Colors.grey.shade700,
+                        padding: EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
             if (canManageMatch) ...[
@@ -811,54 +917,6 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                       ],
                     ),
                   ],
-                ),
-              ),
-            ],
-            if (isBookingOwner && effectiveStatus != 'completed') ...[
-              SizedBox(height: 20),
-              Card(
-                elevation: 2,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Booking Slots',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      SizedBox(height: 10),
-                      Text(
-                        'Your booked slot: ${matchBooking!.slotTime}',
-                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                      ),
-                      SizedBox(height: 12),
-                      Text(
-                        'Other available slots for ${match!.gameType}:',
-                        style: TextStyle(color: Colors.grey[700]),
-                      ),
-                      SizedBox(height: 10),
-                      if (availableSlotsForBooking.isEmpty)
-                        Text(
-                          'No other slots are available for this date right now.',
-                          style: TextStyle(color: Colors.grey[600]),
-                        )
-                      else
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: availableSlotsForBooking.map((slot) {
-                            return Chip(label: Text(slot));
-                          }).toList(),
-                        ),
-                    ],
-                  ),
                 ),
               ),
             ],
@@ -1028,7 +1086,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                         ),
                         SizedBox(height: 10),
                         Text(
-                          'In this ${match!.gameType} game, ${match!.tossResult!['winner'] == 'teamA' ? 'Team A' : 'Team B'} won the toss and chose to ${match!.tossResult!['choice']}',
+                          _buildTossResultText(),
                           style: TextStyle(fontSize: 16),
                         ),
                       ],
@@ -1146,31 +1204,53 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
     }
   }
 
-  Future<List<String>> _loadAvailableSlots(MatchModel matchData) async {
-    if (matchBooking == null || matchTurf == null) {
-      return [];
+  List<String> _getTossChoices(String gameType) {
+    switch (gameType.toLowerCase()) {
+      case 'cricket':
+        return ['bat', 'bowl'];
+      case 'badminton':
+      case 'tennis':
+      case 'pickleball':
+        return ['serve', 'receive'];
+      case 'football':
+        return ['kick-off', 'choose side'];
+      case 'basketball':
+        return ['first possession', 'choose side'];
+      case 'volleyball':
+        return ['serve', 'choose side'];
+      default:
+        return ['start first', 'choose side'];
+    }
+  }
+
+  String _buildTossResultText() {
+    if (match == null || match!.tossResult == null) {
+      return '';
     }
 
-    final turfBookings = await _firestoreService.getTurfBookings(matchData.turfId);
-    final bookingDate = matchBooking!.bookingDate;
-    final bookedSlot = _normalizeSlotTime(matchBooking!.slotTime);
-    final totalCourts = matchTurf!.courts[matchData.gameType] ?? 1;
+    final winningTeam =
+        match!.tossResult!['winner'] == 'teamA' ? 'Team A' : 'Team B';
+    final choice = match!.tossResult!['choice']?.toString() ?? '';
 
-    return _allSlots.where((slot) {
-      final normalizedSlot = _normalizeSlotTime(slot);
-      if (normalizedSlot == bookedSlot) {
-        return false;
-      }
-
-      final bookedCount = turfBookings.where((booking) {
-        return booking.status != 'cancelled' &&
-            booking.gameType == matchData.gameType &&
-            _isSameDay(booking.bookingDate, bookingDate) &&
-            _normalizeSlotTime(booking.slotTime) == normalizedSlot;
-      }).length;
-
-      return bookedCount < totalCourts;
-    }).toList();
+    switch (match!.gameType.toLowerCase()) {
+      case 'cricket':
+        return '$winningTeam won the toss and chose to $choice.';
+      case 'badminton':
+      case 'tennis':
+      case 'pickleball':
+      case 'volleyball':
+        return '$winningTeam won the toss and chose to $choice first.';
+      case 'football':
+        return choice == 'kick-off'
+            ? '$winningTeam won the toss and chose the kick-off.'
+            : '$winningTeam won the toss and chose a side.';
+      case 'basketball':
+        return choice == 'first possession'
+            ? '$winningTeam won the toss and chose first possession.'
+            : '$winningTeam won the toss and chose a side.';
+      default:
+        return '$winningTeam won the toss and chose to $choice.';
+    }
   }
 
   bool _isSameDay(DateTime first, DateTime second) {

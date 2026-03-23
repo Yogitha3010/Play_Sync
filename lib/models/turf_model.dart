@@ -10,6 +10,8 @@ class TurfModel {
   final double pricePerHour;
   final List<String> facilities; // ['AC', 'Changing Room', etc.]
   final String? contact;
+  final String openingTime;
+  final String closingTime;
   final DateTime createdAt;
   final bool isActive;
 
@@ -25,6 +27,8 @@ class TurfModel {
     this.pricePerHour = 0.0,
     this.facilities = const [],
     this.contact,
+    this.openingTime = '06:00',
+    this.closingTime = '22:00',
     required this.createdAt,
     this.isActive = true,
   });
@@ -54,6 +58,8 @@ class TurfModel {
       'pricePerHour': pricePerHour,
       'facilities': facilities,
       'contact': contact,
+      'openingTime': openingTime,
+      'closingTime': closingTime,
       'createdAt': createdAt.toIso8601String(),
       'isActive': isActive,
     };
@@ -76,6 +82,8 @@ class TurfModel {
       pricePerHour: (map['pricePerHour'] ?? 0.0).toDouble(),
       facilities: List<String>.from(map['facilities'] ?? []),
       contact: map['contact'],
+      openingTime: map['openingTime'] ?? '06:00',
+      closingTime: map['closingTime'] ?? '22:00',
       createdAt: map['createdAt'] != null
           ? DateTime.parse(map['createdAt'])
           : DateTime.now(),

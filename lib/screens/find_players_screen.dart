@@ -1,23 +1,28 @@
 import 'package:flutter/material.dart';
-import '../services/matchmaking_service.dart';
-import '../services/auth_service.dart';
+
+import '../constants/game_constants.dart';
 import '../models/player_profile_model.dart';
+import '../services/auth_service.dart';
+import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import 'player_detail_screen.dart';
 
 class FindPlayersScreen extends StatefulWidget {
+  const FindPlayersScreen({Key? key}) : super(key: key);
+
   @override
-  _FindPlayersScreenState createState() => _FindPlayersScreenState();
+  State<FindPlayersScreen> createState() => _FindPlayersScreenState();
 }
 
 class _FindPlayersScreenState extends State<FindPlayersScreen> {
+  final FirestoreService _firestoreService = FirestoreService();
+  final AuthService _authService = AuthService();
+  final TextEditingController _usernameController = TextEditingController();
+
   bool isLoading = false;
   List<PlayerProfileModel> matchingPlayers = [];
-  String selectedGame = 'Cricket';
-  final List<String> games = ['Cricket', 'Badminton', 'Pickleball', 'Football', 'Basketball', 'Tennis', 'Volleyball'];
-
-  final MatchmakingService _matchmakingService = MatchmakingService();
-  final AuthService _authService = AuthService();
+  String? selectedGame = 'Cricket';
+  int minMatches = 0;
 
   @override
   void initState() {
@@ -30,24 +35,40 @@ class _FindPlayersScreenState extends State<FindPlayersScreen> {
 
     try {
       final currentUser = _authService.currentUser;
-      if (currentUser == null) return;
+      if (currentUser == null) {
+        return;
+      }
 
-      final players = await _matchmakingService.findMatchingPlayers(
-        currentPlayerId: currentUser.uid,
+      final players = await _firestoreService.searchPlayers(
+        usernameQuery: _usernameController.text,
         gameType: selectedGame,
-        maxResults: 20,
+        minMatches: minMatches,
+        excludeUserId: currentUser.uid,
       );
+
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         matchingPlayers = players;
         isLoading = false;
       });
     } catch (e) {
+      if (!mounted) {
+        return;
+      }
       setState(() => isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error finding players: $e')),
       );
     }
+  }
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    super.dispose();
   }
 
   @override
@@ -60,57 +81,88 @@ class _FindPlayersScreenState extends State<FindPlayersScreen> {
       ),
       body: Column(
         children: [
-          // Filters
           Container(
             padding: EdgeInsets.all(15),
             color: Colors.grey[100],
-            child: DropdownButtonFormField<String>(
-              value: selectedGame,
-              decoration: InputDecoration(
-                labelText: 'Sport',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+            child: Column(
+              children: [
+                TextField(
+                  controller: _usernameController,
+                  decoration: InputDecoration(
+                    labelText: 'Search by name',
+                    prefixIcon: Icon(Icons.person_search),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onSubmitted: (_) => _findPlayers(),
                 ),
-              ),
-              items: games.map((game) {
-                return DropdownMenuItem(
-                  value: game,
-                  child: Text(game),
-                );
-              }).toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() => selectedGame = value);
-                  _findPlayers();
-                }
-              },
+                SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: selectedGame,
+                  decoration: InputDecoration(
+                    labelText: 'Preferred Game',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  items: GameConstants.supportedGames.map((game) {
+                    return DropdownMenuItem(
+                      value: game,
+                      child: Text(game),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setState(() => selectedGame = value);
+                    _findPlayers();
+                  },
+                ),
+                SizedBox(height: 12),
+                DropdownButtonFormField<int>(
+                  value: minMatches,
+                  decoration: InputDecoration(
+                    labelText: 'Minimum Matches',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  items: const [0, 1, 5, 10, 20, 50].map((value) {
+                    return DropdownMenuItem(
+                      value: value,
+                      child: Text(value == 0 ? 'Any experience' : '$value+ matches'),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    if (value == null) {
+                      return;
+                    }
+                    setState(() => minMatches = value);
+                    _findPlayers();
+                  },
+                ),
+                SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _findPlayers,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.theme.primaryColor,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: Text('Search'),
+                  ),
+                ),
+              ],
             ),
           ),
-
-          // Results
           Expanded(
             child: isLoading
                 ? Center(child: CircularProgressIndicator())
                 : matchingPlayers.isEmpty
                     ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.search_off, size: 64, color: Colors.grey),
-                            SizedBox(height: 20),
-                            Text(
-                              'No matching players found',
-                              style: TextStyle(
-                                fontSize: 18,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                            SizedBox(height: 10),
-                            ElevatedButton(
-                              onPressed: _findPlayers,
-                              child: Text('Search Again'),
-                            ),
-                          ],
+                        child: Text(
+                          'No players matched your filters.',
+                          style: TextStyle(fontSize: 16, color: Colors.grey[700]),
                         ),
                       )
                     : ListView.builder(
@@ -124,7 +176,8 @@ class _FindPlayersScreenState extends State<FindPlayersScreen> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => PlayerDetailScreen(playerId: player.userId),
+                                  builder: (_) =>
+                                      PlayerDetailScreen(playerId: player.userId),
                                 ),
                               );
                             },
@@ -166,7 +219,7 @@ class _PlayerCard extends StatelessWidget {
                 radius: 30,
                 backgroundColor: AppTheme.theme.colorScheme.primary,
                 child: Text(
-                  player.name?.substring(0, 1).toUpperCase() ?? 'P',
+                  (player.name ?? player.username ?? 'P').substring(0, 1).toUpperCase(),
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 20,
@@ -186,16 +239,23 @@ class _PlayerCard extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    SizedBox(height: 5),
+                    SizedBox(height: 2),
+                    if ((player.name ?? '').trim().isEmpty &&
+                        (player.username ?? '').trim().isNotEmpty)
+                      Text(
+                        player.username!,
+                        style: TextStyle(color: Colors.grey[600]),
+                      ),
+                    SizedBox(height: 6),
                     Row(
                       children: [
                         Icon(Icons.star, size: 16, color: Colors.amber),
                         SizedBox(width: 5),
-                        Text('${player.rating.toStringAsFixed(1)}'),
+                        Text('${player.avgRating.toStringAsFixed(1)}'),
                         SizedBox(width: 15),
                         Icon(Icons.sports_soccer, size: 16, color: Colors.grey),
                         SizedBox(width: 5),
-                        Text('${player.gamesPlayed} games'),
+                        Text('${player.gamesPlayed} matches'),
                       ],
                     ),
                     SizedBox(height: 5),
@@ -223,3 +283,5 @@ class _PlayerCard extends StatelessWidget {
     );
   }
 }
+
+

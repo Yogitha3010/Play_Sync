@@ -13,6 +13,7 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
   final _formKey = GlobalKey<FormState>();
 
   final nameController = TextEditingController();
+  final usernameController = TextEditingController();
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
   final confirmPasswordController = TextEditingController();
@@ -63,6 +64,7 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
         email: emailController.text.trim(),
         password: passwordController.text.trim(),
         name: nameController.text.trim(),
+        username: usernameController.text.trim(),
         phone: phoneController.text.trim().isEmpty
             ? null
             : phoneController.text.trim(),
@@ -96,6 +98,7 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
   @override
   void dispose() {
     nameController.dispose();
+    usernameController.dispose();
     emailController.dispose();
     passwordController.dispose();
     confirmPasswordController.dispose();
@@ -147,6 +150,29 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return "Name is required";
+                  }
+                  return null;
+                },
+              ),
+
+              SizedBox(height: 20),
+
+              TextFormField(
+                controller: usernameController,
+                decoration: InputDecoration(
+                  labelText: "Username",
+                  prefixText: "@",
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  prefixIcon: Icon(Icons.alternate_email),
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return "Username is required";
+                  }
+                  if (!RegExp(r'^[a-zA-Z0-9_]{3,20}$').hasMatch(value.trim())) {
+                    return "Use 3-20 letters, numbers, or _";
                   }
                   return null;
                 },

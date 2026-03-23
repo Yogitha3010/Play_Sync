@@ -3,13 +3,12 @@ import '../models/turf_model.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
-import 'achievements_screen.dart';
 import 'available_matches_screen.dart';
 import 'create_match_screen.dart';
 import 'find_players_screen.dart';
 import 'my_matches_screen.dart';
 import 'player_profile_screen.dart';
-import 'role_selection_screen.dart';
+import 'requests_screen.dart';
 import 'teams_screen.dart';
 import 'turf_detail_screen.dart';
 import 'turfs_screen.dart';
@@ -24,10 +23,10 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
 
   final List<Widget> _screens = [
     PlayerHomeTab(),
-    FindPlayersScreen(),
-    CreateMatchScreen(),
+    const FindPlayersScreen(),
+    const AvailableMatchesScreen(),
     MyMatchesScreen(),
-    PlayerProfileScreen(),
+    const RequestsScreen(),
   ];
 
   @override
@@ -54,16 +53,16 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
             label: 'Find Players',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.add_circle_outline),
-            label: 'Create Match',
+            icon: Icon(Icons.event_available),
+            label: 'Matches',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.sports_soccer),
             label: 'My Matches',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: 'Profile',
+            icon: Icon(Icons.mail_outline),
+            label: 'Requests',
           ),
         ],
       ),
@@ -154,13 +153,11 @@ class _PlayerHomeTabState extends State<PlayerHomeTab> {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
-            icon: Icon(Icons.logout),
-            onPressed: () async {
-              final authService = AuthService();
-              await authService.logout();
-              Navigator.pushReplacement(
+            icon: Icon(Icons.person_outline),
+            onPressed: () {
+              Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => RoleSelectionScreen()),
+                MaterialPageRoute(builder: (_) => const PlayerProfileScreen()),
               );
             },
           ),
@@ -322,22 +319,6 @@ class _PlayerHomeTabState extends State<PlayerHomeTab> {
                 children: [
                   Expanded(
                     child: _ActionCard(
-                      icon: Icons.event_available,
-                      title: 'Available Matches',
-                      color: Colors.redAccent,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => AvailableMatchesScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  SizedBox(width: 15),
-                  Expanded(
-                    child: _ActionCard(
                       icon: Icons.add_circle,
                       title: 'Create Match',
                       color: Colors.green,
@@ -367,82 +348,7 @@ class _PlayerHomeTabState extends State<PlayerHomeTab> {
                       },
                     ),
                   ),
-                  SizedBox(width: 15),
-                  Expanded(
-                    child: _ActionCard(
-                      icon: Icons.sports_soccer,
-                      title: 'My Matches',
-                      color: Colors.orange,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => MyMatchesScreen()),
-                        );
-                      },
-                    ),
-                  ),
                 ],
-              ),
-              SizedBox(height: 15),
-              Row(
-                children: [
-                  Expanded(
-                    child: _ActionCard(
-                      icon: Icons.emoji_events,
-                      title: 'Achievements',
-                      color: Colors.purple,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => AchievementsScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  SizedBox(width: 15),
-                  Expanded(
-                    child: const SizedBox.shrink(),
-                  ),
-                ],
-              ),
-              SizedBox(height: 30),
-              Text(
-                'Recent Matches',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              SizedBox(height: 15),
-              Container(
-                width: double.infinity,
-                padding: EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: Column(
-                  children: [
-                    Icon(Icons.history, size: 48, color: Colors.grey),
-                    SizedBox(height: 10),
-                    Text(
-                      'No recent matches',
-                      style: TextStyle(color: Colors.grey[600]),
-                    ),
-                    SizedBox(height: 10),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => CreateMatchScreen()),
-                        );
-                      },
-                      child: Text('Create Your First Match'),
-                    ),
-                  ],
-                ),
               ),
             ],
           ),

@@ -1,13 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../constants/game_constants.dart';
 import '../models/player_profile_model.dart';
 import '../models/turf_model.dart';
 import '../models/match_model.dart';
 import '../models/feedback_model.dart';
-import '../models/achievement_model.dart';
 import '../models/team_model.dart';
 import '../models/booking_model.dart';
+import '../models/play_request_model.dart';
 import 'firebase_service.dart';
 
 class BookingConflictException implements Exception {
@@ -20,6 +20,10 @@ class BookingConflictException implements Exception {
 }
 
 class FirestoreService {
+  String normalizeUsername(String username) {
+    return username.trim().toLowerCase();
+  }
+
   // Player Profile Operations
   Future<void> createPlayerProfile(PlayerProfileModel profile) async {
     await FirebaseService.playerProfilesCollection
@@ -152,15 +156,53 @@ class FirestoreService {
         .toList();
   }
 
+  Future<List<MatchModel>> getMatchesByGameAndStatus({
+    required String gameType,
+    required String status,
+  }) async {
+    final querySnapshot = await FirebaseService.matchesCollection
+        .where('gameType', isEqualTo: gameType)
+        .get();
+    final matches = querySnapshot.docs
+        .map((doc) => MatchModel.fromMap(doc.data() as Map<String, dynamic>))
+        .where((match) => match.matchStatus == status)
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return matches;
+  }
+
   Future<List<MatchModel>> getPlayerMatches(String playerId) async {
     final querySnapshot = await FirebaseService.matchesCollection
         .where('players', arrayContains: playerId)
-        .orderBy('createdAt', descending: true)
         .limit(50)
         .get();
-    return querySnapshot.docs
+    final matches = querySnapshot.docs
         .map((doc) => MatchModel.fromMap(doc.data() as Map<String, dynamic>))
-        .toList();
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return matches;
+  }
+
+  Future<List<MatchModel>> getMatchesForTurfs(List<String> turfIds) async {
+    if (turfIds.isEmpty) {
+      return [];
+    }
+
+    final results = await Future.wait(
+      turfIds.map(
+        (turfId) => FirebaseService.matchesCollection
+            .where('turfId', isEqualTo: turfId)
+            .get(),
+      ),
+    );
+
+    final matches = results
+        .expand((snapshot) => snapshot.docs)
+        .map((doc) => MatchModel.fromMap(doc.data() as Map<String, dynamic>))
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+    return matches;
   }
 
   // Feedback Operations
@@ -172,12 +214,13 @@ class FirestoreService {
 
   Future<List<FeedbackModel>> getFeedbackForPlayer(String playerId) async {
     final querySnapshot = await FirebaseService.feedbackCollection
-        .where('toPlayerId', isEqualTo: playerId)
-        .orderBy('createdAt', descending: true)
+        .where('toUserId', isEqualTo: playerId)
         .get();
-    return querySnapshot.docs
+    final feedback = querySnapshot.docs
         .map((doc) => FeedbackModel.fromMap(doc.data() as Map<String, dynamic>))
-        .toList();
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return feedback;
   }
 
   Future<List<FeedbackModel>> getMatchFeedback(String matchId) async {
@@ -189,23 +232,55 @@ class FirestoreService {
         .toList();
   }
 
-  // Achievement Operations
-  Future<void> createAchievement(AchievementModel achievement) async {
-    await FirebaseService.achievementsCollection
-        .doc(achievement.achievementId)
-        .set(achievement.toMap());
+  Future<bool> hasSubmittedFeedback({
+    required String matchId,
+    required String fromUserId,
+  }) async {
+    final querySnapshot = await FirebaseService.feedbackCollection
+        .where('matchId', isEqualTo: matchId)
+        .where('fromUserId', isEqualTo: fromUserId)
+        .limit(1)
+        .get();
+    return querySnapshot.docs.isNotEmpty;
   }
 
-  Future<List<AchievementModel>> getPlayerAchievements(String playerId) async {
-    final querySnapshot = await FirebaseService.achievementsCollection
-        .where('playerId', isEqualTo: playerId)
-        .orderBy('unlockedAt', descending: true)
-        .get();
-    return querySnapshot.docs
-        .map(
-          (doc) => AchievementModel.fromMap(doc.data() as Map<String, dynamic>),
-        )
-        .toList();
+  Future<void> refreshPlayerRating(String playerId) async {
+    final feedbacks = await getFeedbackForPlayer(playerId);
+    final totalRatings = feedbacks.length;
+    final avgRating = totalRatings == 0
+        ? 0.0
+        : feedbacks.fold<double>(0.0, (sum, item) => sum + item.rating) /
+            totalRatings;
+    final derivedSkillLevel = totalRatings == 0
+        ? 5.0
+        : (avgRating * 2).clamp(0.0, 10.0);
+
+    await updatePlayerProfile(playerId, {
+      'avgRating': avgRating,
+      'rating': avgRating,
+      'totalRatings': totalRatings,
+      'skillLevel': derivedSkillLevel,
+    });
+  }
+
+  Future<void> recordMatchResultForPlayer({
+    required String playerId,
+    required String gameType,
+    required bool won,
+    required bool tied,
+  }) async {
+    final profile = await getPlayerProfile(playerId);
+    if (profile == null) {
+      return;
+    }
+
+    final playedGames = {...profile.playedGames, gameType}.toList()..sort();
+    await updatePlayerProfile(playerId, {
+      'gamesPlayed': profile.gamesPlayed + 1,
+      'totalWins': profile.totalWins + (won ? 1 : 0),
+      'totalLosses': profile.totalLosses + (!won && !tied ? 1 : 0),
+      'playedGames': playedGames,
+    });
   }
 
   // Team Operations
@@ -232,6 +307,71 @@ class FirestoreService {
               )
               .toList(),
         );
+  }
+
+  Future<bool> isUsernameAvailable(
+    String username, {
+    String? excludingUserId,
+  }) async {
+    final normalized = normalizeUsername(username);
+    if (normalized.isEmpty) {
+      return false;
+    }
+
+    final querySnapshot = await FirebaseService.usersCollection
+        .where('usernameLowercase', isEqualTo: normalized)
+        .limit(1)
+        .get();
+
+    if (querySnapshot.docs.isEmpty) {
+      return true;
+    }
+
+    return querySnapshot.docs.first.id == excludingUserId;
+  }
+
+  Future<void> updateUsername({
+    required String userId,
+    required String username,
+    String? name,
+  }) async {
+    final normalized = normalizeUsername(username);
+    final isAvailable = await isUsernameAvailable(
+      username,
+      excludingUserId: userId,
+    );
+
+    if (!isAvailable) {
+      throw Exception('That username is already taken.');
+    }
+
+    final userUpdates = <String, dynamic>{
+      'username': username.trim(),
+      'usernameLowercase': normalized,
+    };
+    final profileUpdates = <String, dynamic>{
+      'username': username.trim(),
+      'usernameLowercase': normalized,
+      'lastUpdated': DateTime.now().toIso8601String(),
+    };
+
+    if (name != null && name.trim().isNotEmpty) {
+      userUpdates['name'] = name.trim();
+      profileUpdates['name'] = name.trim();
+    }
+
+    await FirebaseService.firestore.runTransaction((transaction) async {
+      transaction.set(
+        FirebaseService.usersCollection.doc(userId),
+        userUpdates,
+        SetOptions(merge: true),
+      );
+      transaction.set(
+        FirebaseService.playerProfilesCollection.doc(userId),
+        profileUpdates,
+        SetOptions(merge: true),
+      );
+    });
   }
 
   Future<List<TeamModel>> getTeamsForPlayer(String playerId) async {
@@ -275,6 +415,108 @@ class FirestoreService {
     await FirebaseService.teamsCollection.doc(teamId).update({
       'players': FieldValue.arrayRemove([playerId]),
       'joinRequests': FieldValue.arrayRemove([playerId]),
+    });
+  }
+
+  Future<List<PlayerProfileModel>> searchPlayers({
+    String usernameQuery = '',
+    String? gameType,
+    int minMatches = 0,
+    String? excludeUserId,
+    int limit = 30,
+  }) async {
+    final normalizedQuery = normalizeUsername(usernameQuery);
+    Query query = FirebaseService.playerProfilesCollection;
+    if (gameType != null && gameType.isNotEmpty) {
+      query = query.where('preferredSports', arrayContains: gameType);
+    }
+
+    final querySnapshot = await query.get();
+    final players = querySnapshot.docs
+        .map(
+          (doc) => PlayerProfileModel.fromMap(doc.data() as Map<String, dynamic>),
+        )
+        .where((player) => player.userId != excludeUserId)
+        .where((player) {
+          final matchesOk = player.gamesPlayed >= minMatches;
+          final gameOk = gameType == null ||
+              gameType.isEmpty ||
+              player.preferredSports.contains(gameType);
+          final searchableName = (player.name ?? '').trim().toLowerCase();
+          final searchableUsername = (player.username ?? '').trim().toLowerCase();
+          final queryOk = normalizedQuery.isEmpty ||
+              searchableName.contains(normalizedQuery) ||
+              searchableUsername.contains(normalizedQuery);
+          return matchesOk && gameOk && queryOk;
+        })
+        .toList()
+      ..sort((a, b) {
+        if (normalizedQuery.isNotEmpty) {
+          final aName = (a.name ?? '').trim().toLowerCase();
+          final bName = (b.name ?? '').trim().toLowerCase();
+          final aStarts = aName.startsWith(normalizedQuery) ? 1 : 0;
+          final bStarts = bName.startsWith(normalizedQuery) ? 1 : 0;
+          if (aStarts != bStarts) {
+            return bStarts.compareTo(aStarts);
+          }
+        }
+        return b.avgRating.compareTo(a.avgRating);
+      });
+
+    return players.take(limit).toList();
+  }
+
+  Future<List<String>> getAvailableGameTypes() async {
+    final turfSnapshot = await FirebaseService.turfsCollection.get();
+    final gameTypes = <String>{};
+
+    for (final doc in turfSnapshot.docs) {
+      final turf = TurfModel.fromMap(doc.data() as Map<String, dynamic>);
+      gameTypes.addAll(turf.gamesAvailable);
+    }
+
+    if (gameTypes.isEmpty) {
+      return List<String>.from(GameConstants.supportedGames);
+    }
+
+    final games = gameTypes.toList()..sort();
+    return games;
+  }
+
+  Future<void> createPlayRequest(PlayRequestModel request) async {
+    await FirebaseService.playRequestsCollection
+        .doc(request.requestId)
+        .set(request.toMap());
+  }
+
+  Future<List<PlayRequestModel>> getIncomingPlayRequests(String userId) async {
+    final snapshot = await FirebaseService.playRequestsCollection
+        .where('toUserId', isEqualTo: userId)
+        .orderBy('createdAt', descending: true)
+        .get();
+
+    return snapshot.docs
+        .map((doc) => PlayRequestModel.fromMap(doc.data() as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<PlayRequestModel>> getOutgoingPlayRequests(String userId) async {
+    final snapshot = await FirebaseService.playRequestsCollection
+        .where('fromUserId', isEqualTo: userId)
+        .orderBy('createdAt', descending: true)
+        .get();
+
+    return snapshot.docs
+        .map((doc) => PlayRequestModel.fromMap(doc.data() as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> updatePlayRequestStatus(
+    String requestId,
+    String status,
+  ) async {
+    await FirebaseService.playRequestsCollection.doc(requestId).update({
+      'status': status,
     });
   }
 

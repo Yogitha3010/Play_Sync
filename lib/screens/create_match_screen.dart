@@ -7,6 +7,7 @@ import '../models/turf_model.dart';
 import '../models/booking_model.dart';
 import '../models/team_model.dart';
 import '../theme/app_theme.dart';
+import '../services/slot_service.dart';
 import 'match_detail_screen.dart';
 
 class CreateMatchScreen extends StatefulWidget {
@@ -23,17 +24,6 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
 
   final _formKey = GlobalKey<FormState>();
   final maxPlayersController = TextEditingController(text: '10');
-  final List<String> _allSlots = const [
-    '06:00 - 07:00',
-    '07:00 - 08:00',
-    '08:00 - 09:00',
-    '16:00 - 17:00',
-    '17:00 - 18:00',
-    '18:00 - 19:00',
-    '19:00 - 20:00',
-    '20:00 - 21:00',
-    '21:00 - 22:00',
-  ];
 
   String selectedGame = 'Cricket';
   TurfModel? selectedTurf;
@@ -261,7 +251,12 @@ class _CreateMatchScreenState extends State<CreateMatchScreen> {
       return [];
     }
 
-    return _allSlots.where((slot) {
+    final generatedSlots = SlotService.generateSlots(
+      selectedTurf!.openingTime,
+      selectedTurf!.closingTime,
+    );
+
+    return generatedSlots.where((slot) {
       return _isSlotInFuture(slot) && _getRemainingCapacity(slot) > 0;
     }).toList();
   }

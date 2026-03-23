@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
-import '../services/firestore_service.dart';
-import '../services/auth_service.dart';
-import '../services/achievement_service.dart';
-import '../models/match_model.dart';
+
 import '../models/feedback_model.dart';
+import '../models/match_model.dart';
 import '../models/player_profile_model.dart';
+import '../services/auth_service.dart';
+import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 
 class FeedbackScreen extends StatefulWidget {
@@ -14,19 +14,20 @@ class FeedbackScreen extends StatefulWidget {
   const FeedbackScreen({Key? key, required this.matchId}) : super(key: key);
 
   @override
-  _FeedbackScreenState createState() => _FeedbackScreenState();
+  State<FeedbackScreen> createState() => _FeedbackScreenState();
 }
 
 class _FeedbackScreenState extends State<FeedbackScreen> {
   bool isLoading = true;
+  bool isSubmitting = false;
+  bool alreadySubmitted = false;
   MatchModel? match;
   List<PlayerProfileModel> players = [];
-  Map<String, double> ratings = {};
-  Map<String, String> comments = {};
+  Map<String, int> ratings = {};
+  final Map<String, TextEditingController> _commentControllers = {};
 
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
-  final AchievementService _achievementService = AchievementService();
 
   @override
   void initState() {
@@ -39,72 +40,116 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
 
     try {
       final matchData = await _firestoreService.getMatch(widget.matchId);
-      if (matchData == null) return;
-
-      setState(() => match = matchData);
-
-      // Load player profiles
-      List<PlayerProfileModel> playerList = [];
       final currentUser = _authService.currentUser;
-      if (currentUser == null) return;
+      if (matchData == null || currentUser == null) {
+        return;
+      }
 
-      for (String playerId in matchData.players) {
-        if (playerId != currentUser.uid) {
-          final profile = await _firestoreService.getPlayerProfile(playerId);
-          if (profile != null) {
-            playerList.add(profile);
-            ratings[playerId] = 3.0;
-            comments[playerId] = '';
-          }
+      final hasSubmitted = await _firestoreService.hasSubmittedFeedback(
+        matchId: widget.matchId,
+        fromUserId: currentUser.uid,
+      );
+
+      if (hasSubmitted) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          match = matchData;
+          players = [];
+          alreadySubmitted = true;
+          isLoading = false;
+        });
+        return;
+      }
+
+      final playerList = <PlayerProfileModel>[];
+      for (final playerId in matchData.players) {
+        if (playerId == currentUser.uid) {
+          continue;
+        }
+        final profile = await _firestoreService.getPlayerProfile(playerId);
+        if (profile != null) {
+          playerList.add(profile);
+          ratings[playerId] = 5;
+          _commentControllers[playerId] = TextEditingController();
         }
       }
 
+      if (!mounted) {
+        return;
+      }
+
       setState(() {
+        match = matchData;
         players = playerList;
+        alreadySubmitted = false;
         isLoading = false;
       });
     } catch (e) {
+      if (!mounted) {
+        return;
+      }
       setState(() => isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading match: $e')),
+        SnackBar(content: Text('Error loading feedback form: $e')),
       );
     }
   }
 
   Future<void> _submitFeedback() async {
-    try {
-      final currentUser = _authService.currentUser;
-      if (currentUser == null) return;
+    final currentUser = _authService.currentUser;
+    if (currentUser == null || match == null || isSubmitting) {
+      return;
+    }
 
-      for (String playerId in ratings.keys) {
+    setState(() => isSubmitting = true);
+    try {
+      for (final player in players) {
         final feedback = FeedbackModel(
           feedbackId: Uuid().v4(),
+          fromUserId: currentUser.uid,
+          toUserId: player.userId,
           matchId: widget.matchId,
-          fromPlayerId: currentUser.uid,
-          toPlayerId: playerId,
-          rating: ratings[playerId]!,
-          comments: comments[playerId]?.isEmpty ?? true ? null : comments[playerId],
+          rating: (ratings[player.userId] ?? 5).toDouble(),
+          comment: _commentControllers[player.userId]?.text.trim().isEmpty ?? true
+              ? null
+              : _commentControllers[player.userId]!.text.trim(),
+          gameType: match!.gameType,
           createdAt: DateTime.now(),
         );
-
         await _firestoreService.createFeedback(feedback);
+        await _firestoreService.refreshPlayerRating(player.userId);
       }
 
-      // Update ratings for all players who received feedback
-      for (String playerId in ratings.keys) {
-        await _achievementService.updatePlayerRating(playerId);
+      if (!mounted) {
+        return;
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Feedback submitted successfully!')),
+        SnackBar(content: Text('Feedback submitted successfully.')),
       );
-
       Navigator.pop(context);
     } catch (e) {
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error submitting feedback: $e')),
       );
+    } finally {
+      if (mounted) {
+        setState(() => isSubmitting = false);
+      }
     }
+  }
+
+  @override
+  void dispose() {
+    for (final controller in _commentControllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
   }
 
   @override
@@ -126,104 +171,141 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
         backgroundColor: AppTheme.theme.primaryColor,
         foregroundColor: Colors.white,
       ),
-      body: SingleChildScrollView(
+      body: alreadySubmitted
+          ? Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.verified, size: 60, color: Colors.green),
+                    SizedBox(height: 16),
+                    Text(
+                      'Feedback already submitted',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    SizedBox(height: 10),
+                    Text(
+                      'Your ratings and comments have already been saved for this match.',
+                      style: TextStyle(color: Colors.grey[700]),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : players.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.group_off, size: 60, color: Colors.grey),
+                        SizedBox(height: 16),
+                        Text(
+                          'No players to review',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(height: 10),
+                        Text(
+                          'Feedback is available when there are other players in this completed match.',
+                          style: TextStyle(color: Colors.grey[700]),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : SingleChildScrollView(
         padding: EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Rate Your Teammates',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
+              'Rate Players',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
-            SizedBox(height: 10),
+            SizedBox(height: 8),
             Text(
-              'Provide feedback for all players in this match',
+              'Review every player from this match except yourself.',
               style: TextStyle(color: Colors.grey[600]),
             ),
-            SizedBox(height: 30),
+            SizedBox(height: 24),
             ...players.map((player) {
               return Card(
-                margin: EdgeInsets.only(bottom: 20),
+                margin: EdgeInsets.only(bottom: 16),
                 child: Padding(
-                  padding: EdgeInsets.all(15),
+                  padding: EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          CircleAvatar(
-                            child: Text(
-                              player.name?.substring(0, 1).toUpperCase() ?? 'P',
-                            ),
-                          ),
-                          SizedBox(width: 15),
-                          Expanded(
-                            child: Text(
-                              player.name ?? 'Unknown Player',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
+                      Text(
+                        player.name ?? player.username ?? 'Player',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                      SizedBox(height: 15),
-                      Text('Rating: ${ratings[player.userId]!.toStringAsFixed(1)}'),
-                      Slider(
-                        value: ratings[player.userId]!,
-                        min: 1.0,
-                        max: 5.0,
-                        divisions: 4,
-                        label: ratings[player.userId]!.toStringAsFixed(1),
-                        onChanged: (value) {
-                          setState(() {
-                            ratings[player.userId] = value;
-                          });
-                        },
+                      SizedBox(height: 4),
+                      if ((player.name ?? '').trim().isEmpty &&
+                          (player.username ?? '').trim().isNotEmpty)
+                        Text(
+                          player.username!,
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                      SizedBox(height: 14),
+                      Wrap(
+                        spacing: 8,
+                        children: List.generate(5, (index) {
+                          final starValue = index + 1;
+                          final selected = (ratings[player.userId] ?? 5) >= starValue;
+                          return IconButton(
+                            onPressed: () {
+                              setState(() => ratings[player.userId] = starValue);
+                            },
+                            icon: Icon(
+                              selected ? Icons.star : Icons.star_border,
+                              color: Colors.amber,
+                            ),
+                          );
+                        }),
                       ),
-                      SizedBox(height: 10),
                       TextField(
+                        controller: _commentControllers[player.userId],
+                        maxLines: 3,
                         decoration: InputDecoration(
-                          labelText: 'Comments (Optional)',
+                          labelText: 'Comment',
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        maxLines: 3,
-                        onChanged: (value) {
-                          comments[player.userId] = value;
-                        },
                       ),
                     ],
                   ),
                 ),
               );
             }),
-            SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _submitFeedback,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.theme.colorScheme.primary,
-                foregroundColor: Colors.white,
-                padding: EdgeInsets.symmetric(vertical: 18),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: isSubmitting ? null : _submitFeedback,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.theme.primaryColor,
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(vertical: 16),
                 ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.check),
-                  SizedBox(width: 10),
-                  Text(
-                    'Submit Feedback',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                ],
+                child: Text(
+                  isSubmitting ? 'Submitting...' : 'Submit Feedback',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
               ),
             ),
           ],
@@ -232,3 +314,5 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     );
   }
 }
+
+

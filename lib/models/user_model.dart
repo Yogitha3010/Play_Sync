@@ -4,6 +4,8 @@ class UserModel {
   final String email;
   final String? name;
   final String? phone;
+  final String? username;
+  final String? usernameLowercase;
   final DateTime createdAt;
   final bool profileCompleted;
 
@@ -13,6 +15,8 @@ class UserModel {
     required this.email,
     this.name,
     this.phone,
+    this.username,
+    this.usernameLowercase,
     required this.createdAt,
     this.profileCompleted = false,
   });
@@ -24,6 +28,8 @@ class UserModel {
       'email': email,
       'name': name,
       'phone': phone,
+      'username': username,
+      'usernameLowercase': usernameLowercase,
       'createdAt': createdAt.toIso8601String(),
       'profileCompleted': profileCompleted,
     };
@@ -36,6 +42,8 @@ class UserModel {
       email: map['email'] ?? '',
       name: map['name'],
       phone: map['phone'],
+      username: map['username'],
+      usernameLowercase: map['usernameLowercase'],
       createdAt: map['createdAt'] != null
           ? DateTime.parse(map['createdAt'])
           : DateTime.now(),

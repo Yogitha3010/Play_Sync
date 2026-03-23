@@ -1,7 +1,17 @@
 import 'package:flutter/material.dart';
-import '../services/firestore_service.dart';
+import 'package:uuid/uuid.dart';
+
+import '../constants/game_constants.dart';
+import '../models/booking_model.dart';
+import '../models/feedback_model.dart';
+import '../models/play_request_model.dart';
 import '../models/player_profile_model.dart';
+import '../models/turf_model.dart';
+import '../services/auth_service.dart';
+import '../services/firestore_service.dart';
+import '../services/slot_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/player_profile_content.dart';
 
 class PlayerDetailScreen extends StatefulWidget {
   final String playerId;
@@ -9,14 +19,17 @@ class PlayerDetailScreen extends StatefulWidget {
   const PlayerDetailScreen({Key? key, required this.playerId}) : super(key: key);
 
   @override
-  _PlayerDetailScreenState createState() => _PlayerDetailScreenState();
+  State<PlayerDetailScreen> createState() => _PlayerDetailScreenState();
 }
 
 class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   bool isLoading = true;
+  bool isSubmittingRequest = false;
   PlayerProfileModel? profile;
-
+  List<FeedbackModel> feedbackList = [];
+  Map<String, int> gameCounts = {};
   final FirestoreService _firestoreService = FirestoreService();
+  final AuthService _authService = AuthService();
 
   @override
   void initState() {
@@ -29,16 +42,291 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
 
     try {
       final profileData = await _firestoreService.getPlayerProfile(widget.playerId);
+      final feedbackData = await _firestoreService.getFeedbackForPlayer(
+        widget.playerId,
+      );
+      final matches = await _firestoreService.getPlayerMatches(widget.playerId);
+      final counts = <String, int>{};
+      for (final match in matches) {
+        counts.update(match.gameType, (value) => value + 1, ifAbsent: () => 1);
+      }
+
+      if (!mounted) {
+        return;
+      }
+
       setState(() {
         profile = profileData;
+        feedbackList = feedbackData;
+        gameCounts = Map.fromEntries(
+          counts.entries.toList()..sort((a, b) => a.key.compareTo(b.key)),
+        );
         isLoading = false;
       });
     } catch (e) {
+      if (!mounted) {
+        return;
+      }
       setState(() => isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error loading profile: $e')),
       );
     }
+  }
+
+  Future<void> _showRequestToPlaySheet() async {
+    final currentUser = _authService.currentUser;
+    if (currentUser == null || profile == null) {
+      return;
+    }
+
+    final turfs = await _firestoreService.searchTurfs();
+    if (!mounted) {
+      return;
+    }
+
+    String? selectedGame = profile!.preferredSports.isNotEmpty
+        ? profile!.preferredSports.first
+        : GameConstants.supportedGames.first;
+    TurfModel? selectedTurf = turfs.isNotEmpty ? turfs.first : null;
+    DateTime selectedDate = DateTime.now().add(Duration(days: 1));
+    String? selectedSlot;
+    List<BookingModel> turfBookings = selectedTurf == null
+        ? []
+        : await _firestoreService.getTurfBookings(selectedTurf.turfId);
+
+    List<String> availableSlots() {
+      if (selectedTurf == null || selectedGame == null) {
+        return [];
+      }
+
+      final slots = SlotService.generateSlots(
+        selectedTurf!.openingTime,
+        selectedTurf!.closingTime,
+      );
+
+      return slots.where((slot) {
+        final bookedCount = turfBookings.where((booking) {
+          return booking.status != 'cancelled' &&
+              booking.gameType == selectedGame &&
+              _isSameDay(booking.bookingDate, selectedDate) &&
+              booking.slotTime == slot;
+        }).length;
+        return bookedCount < (selectedTurf!.courts[selectedGame!] ?? 1);
+      }).toList();
+    }
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final slots = availableSlots();
+            if (selectedSlot != null && !slots.contains(selectedSlot)) {
+              selectedSlot = null;
+            }
+
+            Future<void> refreshTurfBookings() async {
+              if (selectedTurf == null) {
+                return;
+              }
+              turfBookings = await _firestoreService.getTurfBookings(
+                selectedTurf!.turfId,
+              );
+              setModalState(() {});
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Request to Play',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: selectedGame,
+                      decoration: InputDecoration(
+                        labelText: 'Game',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      items: GameConstants.supportedGames.map((game) {
+                        return DropdownMenuItem(value: game, child: Text(game));
+                      }).toList(),
+                      onChanged: (value) {
+                        setModalState(() => selectedGame = value);
+                      },
+                    ),
+                    SizedBox(height: 12),
+                    DropdownButtonFormField<TurfModel>(
+                      value: selectedTurf,
+                      decoration: InputDecoration(
+                        labelText: 'Turf',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      items: turfs.map((turf) {
+                        return DropdownMenuItem(
+                          value: turf,
+                          child: Text('${turf.name} - ${turf.location}'),
+                        );
+                      }).toList(),
+                      onChanged: (value) async {
+                        selectedTurf = value;
+                        selectedSlot = null;
+                        await refreshTurfBookings();
+                      },
+                    ),
+                    SizedBox(height: 12),
+                    ListTile(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      title: Text(
+                        '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+                      ),
+                      trailing: Icon(Icons.calendar_today),
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: selectedDate,
+                          firstDate: DateTime.now(),
+                          lastDate: DateTime.now().add(Duration(days: 60)),
+                        );
+                        if (picked != null) {
+                          selectedDate = picked;
+                          selectedSlot = null;
+                          await refreshTurfBookings();
+                        }
+                      },
+                    ),
+                    SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: selectedSlot,
+                      decoration: InputDecoration(
+                        labelText: 'Time Slot',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      items: slots.map((slot) {
+                        return DropdownMenuItem(value: slot, child: Text(slot));
+                      }).toList(),
+                      onChanged: slots.isEmpty
+                          ? null
+                          : (value) {
+                              setModalState(() => selectedSlot = value);
+                            },
+                    ),
+                    SizedBox(height: 20),
+                    ElevatedButton(
+                      onPressed: isSubmittingRequest
+                          ? null
+                          : () async {
+                              if (selectedGame == null ||
+                                  selectedTurf == null ||
+                                  selectedSlot == null) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Please choose a game, turf, and slot.',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
+
+                              Navigator.pop(context);
+                              await _submitPlayRequest(
+                                currentUser.uid,
+                                selectedGame!,
+                                selectedTurf!,
+                                selectedDate,
+                                selectedSlot!,
+                              );
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.theme.primaryColor,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      child: Text('Send Request'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _submitPlayRequest(
+    String fromUserId,
+    String gameType,
+    TurfModel turf,
+    DateTime date,
+    String slotTime,
+  ) async {
+    setState(() => isSubmittingRequest = true);
+    try {
+      final request = PlayRequestModel(
+        requestId: Uuid().v4(),
+        fromUserId: fromUserId,
+        toUserId: widget.playerId,
+        gameType: gameType,
+        turfId: turf.turfId,
+        date: DateTime(date.year, date.month, date.day),
+        slotTime: slotTime,
+        createdAt: DateTime.now(),
+      );
+
+      await _firestoreService.createPlayRequest(request);
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Play request sent successfully.')),
+      );
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to send request: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => isSubmittingRequest = false);
+      }
+    }
+  }
+
+  bool _isSameDay(DateTime first, DateTime second) {
+    return first.year == second.year &&
+        first.month == second.month &&
+        first.day == second.day;
   }
 
   @override
@@ -71,114 +359,30 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
         backgroundColor: AppTheme.theme.primaryColor,
         foregroundColor: Colors.white,
       ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(20),
-        child: Column(
-          children: [
-            // Profile Header
-            CircleAvatar(
-              radius: 50,
-              backgroundColor: AppTheme.theme.colorScheme.primary,
-              child: Text(
-                profile!.name?.substring(0, 1).toUpperCase() ?? 'P',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 36,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            SizedBox(height: 15),
-            Text(
-              profile!.name ?? 'Unknown Player',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            SizedBox(height: 30),
-
-            // Stats
-            Row(
-              children: [
-                Expanded(
-                  child: Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Column(
-                        children: [
-                          Icon(Icons.star, size: 40, color: Colors.amber),
-                          SizedBox(height: 10),
-                          Text(
-                            profile!.rating.toStringAsFixed(1),
-                            style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Text('Rating'),
-                        ],
-                      ),
+      body: PlayerProfileContent(
+        profile: profile!,
+        feedbackList: feedbackList,
+        gameCounts: gameCounts,
+        footer: _authService.currentUser?.uid == widget.playerId
+            ? null
+            : SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: isSubmittingRequest ? null : _showRequestToPlaySheet,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.theme.primaryColor,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
                     ),
                   ),
-                ),
-                SizedBox(width: 15),
-                Expanded(
-                  child: Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Column(
-                        children: [
-                          Icon(Icons.sports_soccer, size: 40, color: Colors.blue),
-                          SizedBox(height: 10),
-                          Text(
-                            profile!.gamesPlayed.toString(),
-                            style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Text('Games'),
-                        ],
-                      ),
-                    ),
+                  child: Text(
+                    isSubmittingRequest ? 'Sending...' : 'Request to Play',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ),
-              ],
-            ),
-            SizedBox(height: 20),
-
-            // Preferred Sports
-            Card(
-              child: Padding(
-                padding: EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Preferred Sports',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    SizedBox(height: 15),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: profile!.preferredSports.map((sport) {
-                        return Chip(
-                          label: Text(sport),
-                          backgroundColor: AppTheme.theme.colorScheme.primary.withOpacity(0.2),
-                        );
-                      }).toList(),
-                    ),
-                  ],
-                ),
               ),
-            ),
-          ],
-        ),
       ),
     );
   }

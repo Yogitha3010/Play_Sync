@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
+import '../services/slot_service.dart';
 import '../models/turf_model.dart';
+import '../models/user_model.dart';
 import '../theme/app_theme.dart';
+import 'role_selection_screen.dart';
 import 'turf_home_screen.dart';
 
 class TurfProfileSetupScreen extends StatefulWidget {
@@ -30,6 +33,11 @@ class _TurfProfileSetupScreenState extends State<TurfProfileSetupScreen> {
   final locationController = TextEditingController();
   final priceController = TextEditingController();
   final contactController = TextEditingController();
+  final ownerNameController = TextEditingController();
+  final ownerPhoneController = TextEditingController();
+  final ownerEmailController = TextEditingController();
+  final openingTimeController = TextEditingController(text: '06:00');
+  final closingTimeController = TextEditingController(text: '22:00');
 
   Map<String, bool> games = {
     'Cricket': false,
@@ -63,6 +71,7 @@ class _TurfProfileSetupScreenState extends State<TurfProfileSetupScreen> {
       courtControllers[game] = TextEditingController();
     }
     _populateExistingData();
+    _loadOwnerDetails();
   }
 
   void _populateExistingData() {
@@ -73,6 +82,8 @@ class _TurfProfileSetupScreenState extends State<TurfProfileSetupScreen> {
     locationController.text = turf.location;
     priceController.text = turf.pricePerHour.toStringAsFixed(0);
     contactController.text = turf.contact ?? '';
+    openingTimeController.text = turf.openingTime;
+    closingTimeController.text = turf.closingTime;
     facilities = List<String>.from(turf.facilities);
 
     for (final game in turf.gamesAvailable) {
@@ -80,6 +91,19 @@ class _TurfProfileSetupScreenState extends State<TurfProfileSetupScreen> {
         games[game] = true;
         courtControllers[game]?.text = (turf.courts[game] ?? 0).toString();
       }
+    }
+  }
+
+  Future<void> _loadOwnerDetails() async {
+    try {
+      final UserModel? owner = await _authService.getUserData(widget.ownerId);
+      if (owner == null || !mounted) return;
+
+      ownerNameController.text = owner.name ?? '';
+      ownerPhoneController.text = owner.phone ?? '';
+      ownerEmailController.text = owner.email;
+    } catch (_) {
+      // Keep form usable even if owner details fail to load.
     }
   }
 
@@ -109,9 +133,23 @@ class _TurfProfileSetupScreenState extends State<TurfProfileSetupScreen> {
       }
     }
 
+    final generatedSlots = SlotService.generateSlots(
+      openingTimeController.text.trim(),
+      closingTimeController.text.trim(),
+    );
+    if (generatedSlots.isEmpty) {
+      showMessage('Please choose valid opening and closing times');
+      return;
+    }
+
     setState(() => isLoading = true);
 
     try {
+      await _authService.updateUserData(widget.ownerId, {
+        'name': ownerNameController.text.trim(),
+        'phone': ownerPhoneController.text.trim(),
+      });
+
       Map<String, int> courts = {};
       for (String game in selectedGames) {
         courts[game] = int.parse(courtControllers[game]!.text);
@@ -130,6 +168,8 @@ class _TurfProfileSetupScreenState extends State<TurfProfileSetupScreen> {
           pricePerHour: double.tryParse(priceController.text) ?? 0.0,
           facilities: facilities,
           contact: contactController.text.trim(),
+          openingTime: openingTimeController.text.trim(),
+          closingTime: closingTimeController.text.trim(),
           createdAt: DateTime.now(),
         );
 
@@ -146,6 +186,8 @@ class _TurfProfileSetupScreenState extends State<TurfProfileSetupScreen> {
           'pricePerHour': double.tryParse(priceController.text) ?? 0.0,
           'facilities': facilities,
           'contact': contactController.text.trim(),
+          'openingTime': openingTimeController.text.trim(),
+          'closingTime': closingTimeController.text.trim(),
           'isActive': existingTurf.isActive,
         });
       }
@@ -181,6 +223,11 @@ class _TurfProfileSetupScreenState extends State<TurfProfileSetupScreen> {
     locationController.dispose();
     priceController.dispose();
     contactController.dispose();
+    ownerNameController.dispose();
+    ownerPhoneController.dispose();
+    ownerEmailController.dispose();
+    openingTimeController.dispose();
+    closingTimeController.dispose();
     for (var controller in courtControllers.values) {
       controller.dispose();
     }
@@ -196,6 +243,20 @@ class _TurfProfileSetupScreenState extends State<TurfProfileSetupScreen> {
         ),
         backgroundColor: AppTheme.theme.primaryColor,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: Icon(Icons.logout),
+            onPressed: () async {
+              await _authService.logout();
+              if (!mounted) return;
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => const RoleSelectionScreen()),
+                (route) => false,
+              );
+            },
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: EdgeInsets.all(20),
@@ -219,6 +280,59 @@ class _TurfProfileSetupScreenState extends State<TurfProfileSetupScreen> {
                 style: TextStyle(color: Colors.grey[600]),
               ),
               SizedBox(height: 30),
+
+              Text(
+                'Owner Details',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 12),
+              TextFormField(
+                controller: ownerNameController,
+                decoration: InputDecoration(
+                  labelText: 'Owner Name *',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  prefixIcon: Icon(Icons.person),
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Owner name is required';
+                  }
+                  return null;
+                },
+              ),
+              SizedBox(height: 15),
+              TextFormField(
+                controller: ownerEmailController,
+                readOnly: true,
+                decoration: InputDecoration(
+                  labelText: 'Email',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  prefixIcon: Icon(Icons.email_outlined),
+                ),
+              ),
+              SizedBox(height: 15),
+              TextFormField(
+                controller: ownerPhoneController,
+                keyboardType: TextInputType.phone,
+                decoration: InputDecoration(
+                  labelText: 'Owner Phone *',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  prefixIcon: Icon(Icons.call),
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Owner phone is required';
+                  }
+                  return null;
+                },
+              ),
+              SizedBox(height: 25),
 
               // Turf Name
               TextFormField(
@@ -278,6 +392,25 @@ class _TurfProfileSetupScreenState extends State<TurfProfileSetupScreen> {
                   }
                   return null;
                 },
+              ),
+              SizedBox(height: 15),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: _TimePickerField(
+                      controller: openingTimeController,
+                      label: 'Opening Time *',
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: _TimePickerField(
+                      controller: closingTimeController,
+                      label: 'Closing Time *',
+                    ),
+                  ),
+                ],
               ),
               SizedBox(height: 15),
 
@@ -407,6 +540,51 @@ class _TurfProfileSetupScreenState extends State<TurfProfileSetupScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _TimePickerField extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+
+  const _TimePickerField({
+    required this.controller,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      controller: controller,
+      readOnly: true,
+      decoration: InputDecoration(
+        labelText: label,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        prefixIcon: Icon(Icons.access_time),
+      ),
+      onTap: () async {
+        final parts = controller.text.split(':');
+        final initialHour = int.tryParse(parts.first) ?? 6;
+        final initialMinute =
+            parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0;
+        final picked = await showTimePicker(
+          context: context,
+          initialTime: TimeOfDay(hour: initialHour, minute: initialMinute),
+        );
+        if (picked != null) {
+          controller.text =
+              '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+        }
+      },
+      validator: (value) {
+        if (value == null || value.trim().isEmpty) {
+          return 'Required';
+        }
+        return null;
+      },
     );
   }
 }
