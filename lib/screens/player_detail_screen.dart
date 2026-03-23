@@ -105,7 +105,30 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
         selectedTurf!.closingTime,
       );
 
+      final now = DateTime.now();
+      final isToday = selectedDate.year == now.year &&
+          selectedDate.month == now.month &&
+          selectedDate.day == now.day;
+
       return slots.where((slot) {
+        // For today, filter out slots whose start time has already passed
+        if (isToday) {
+          final parts = slot.split(' - ');
+          if (parts.isNotEmpty) {
+            final timeParts = parts[0].trim().split(':');
+            if (timeParts.length == 2) {
+              final slotHour = int.tryParse(timeParts[0]) ?? 0;
+              final slotMinute = int.tryParse(timeParts[1]) ?? 0;
+              final slotStartMinutes = slotHour * 60 + slotMinute;
+              final nowMinutes = now.hour * 60 + now.minute;
+              if (slotStartMinutes <= nowMinutes) {
+                return false;
+              }
+            }
+          }
+        }
+
+        // Filter out fully booked slots
         final bookedCount = turfBookings.where((booking) {
           return booking.status != 'cancelled' &&
               booking.gameType == selectedGame &&

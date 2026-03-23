@@ -492,23 +492,25 @@ class FirestoreService {
   Future<List<PlayRequestModel>> getIncomingPlayRequests(String userId) async {
     final snapshot = await FirebaseService.playRequestsCollection
         .where('toUserId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
         .get();
 
-    return snapshot.docs
+    final requests = snapshot.docs
         .map((doc) => PlayRequestModel.fromMap(doc.data() as Map<String, dynamic>))
         .toList();
+    requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return requests;
   }
 
   Future<List<PlayRequestModel>> getOutgoingPlayRequests(String userId) async {
     final snapshot = await FirebaseService.playRequestsCollection
         .where('fromUserId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
         .get();
 
-    return snapshot.docs
+    final requests = snapshot.docs
         .map((doc) => PlayRequestModel.fromMap(doc.data() as Map<String, dynamic>))
         .toList();
+    requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return requests;
   }
 
   Future<void> updatePlayRequestStatus(
