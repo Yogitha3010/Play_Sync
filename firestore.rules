@@ -3,17 +3,74 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // This rule allows anyone with your Firestore database reference to view, edit,
-    // and delete all data in your Firestore database. It is useful for getting
-    // started, but it is configured to expire after 30 days because it
-    // leaves your app open to attackers. At that time, all client
-    // requests to your Firestore database will be denied.
-    //
-    // Make sure to write security rules for your app before that time, or else
-    // all client requests to your Firestore database will be denied until you Update
-    // your rules
-    match /{document=**} {
-      allow read, write: if request.time < timestamp.date(2026, 3, 25);
+    // Helper: check if the request is from a signed-in user
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper: check if the signed-in user owns the document
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // users collection — each user can read/write their own document
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // playerProfiles — owners can write their own; any authenticated user can read
+    match /playerProfiles/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId);
+    }
+
+    // turfs — turf owners manage their own turfs; any authenticated user can read
+    match /turfs/{turfId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
+    }
+
+    // bookings — any authenticated user can read/create; only owner can update/delete
+    match /bookings/{bookingId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && resource.data.playerId == request.auth.uid;
+    }
+
+    // bookingSlots — authenticated users can read; turf owner can write
+    match /bookingSlots/{slotId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    // matches — any authenticated user can read; participants/creator can write
+    match /matches/{matchId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && resource.data.createdBy == request.auth.uid;
+    }
+
+    // playRequests — authenticated users can read/write
+    match /playRequests/{requestId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // feedback — authenticated users can read/write
+    match /feedback/{feedbackId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // chats — authenticated users can read/write
+    match /chats/{chatId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // teams — authenticated users can read; creator can write
+    match /teams/{teamId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && resource.data.createdBy == request.auth.uid;
     }
   }
 }

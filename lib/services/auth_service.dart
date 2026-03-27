@@ -219,8 +219,14 @@ class AuthService {
       }
 
       // Native platforms: use google_sign_in plugin.
-      // The v7+ api exposes a singleton and uses authenticate() instead of a constructor.
-      await GoogleSignIn.instance.initialize();
+      // The v7+ API requires a serverClientId (Web Client ID from Google Cloud Console)
+      // to produce an idToken on native Android. Find it in:
+      // Google Cloud Console → APIs & Services → Credentials → "Web client (auto created by Google Service)"
+      // Then paste it below.
+      const String webClientId =
+          '1031724299384-kf55tdt6cfknno4vnp24johqn1o58gle.apps.googleusercontent.com';
+
+      await GoogleSignIn.instance.initialize(serverClientId: webClientId);
       final GoogleSignInAccount googleUser = await GoogleSignIn.instance
           .authenticate(scopeHint: ['email']);
 

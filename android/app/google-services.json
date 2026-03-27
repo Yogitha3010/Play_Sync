@@ -12,7 +12,20 @@
           "package_name": "com.example.playsync"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "1031724299384-2thtfkfm77o4idl79huttndn0386fjb7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.playsync",
+            "certificate_hash": "961224bcd732aa3d3c31ba695387a73df40937ef"
+          }
+        },
+        {
+          "client_id": "1031724299384-kf55tdt6cfknno4vnp24johqn1o58gle.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCy_e01_8f7Vz2lFHKYJRLv4N3oTrOFgX8"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1031724299384-kf55tdt6cfknno4vnp24johqn1o58gle.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
