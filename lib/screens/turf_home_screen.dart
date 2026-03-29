@@ -11,12 +11,10 @@ class TurfHomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Turf Owner Dashboard'),
-        backgroundColor: AppTheme.theme.primaryColor,
-        foregroundColor: Colors.white,
+        title: const Text('Turf Owner Dashboard'),
         actions: [
           IconButton(
-            icon: Icon(Icons.person_outline),
+            icon: const Icon(Icons.person_outline),
             onPressed: () {
               Navigator.push(
                 context,
@@ -26,57 +24,87 @@ class TurfHomeScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Welcome Card
-            Container(
-              padding: EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppTheme.theme.colorScheme.primary,
-                    AppTheme.theme.colorScheme.primary.withOpacity(0.7),
+      body: Container(
+        decoration: AppTheme.pageDecoration(),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  gradient: AppTheme.heroGradient,
+                  borderRadius: BorderRadius.circular(28),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.primary.withValues(alpha: 0.16),
+                      blurRadius: 28,
+                      offset: const Offset(0, 14),
+                    ),
                   ],
                 ),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Welcome, Turf Owner!',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Welcome, Turf Owner!',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
                     ),
-                  ),
-                  SizedBox(height: 10),
-                  Text(
-                    'Manage your turfs and bookings',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.white.withOpacity(0.9),
+                    const SizedBox(height: 10),
+                    Text(
+                      'Manage your turfs and bookings',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.white.withValues(alpha: 0.92),
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 18),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.auto_graph_rounded,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'Professional owner workspace',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            SizedBox(height: 30),
-
-            // Quick Actions
-            Text(
-              'Quick Actions',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
+              const SizedBox(height: 30),
+              const Text(
+                'Quick Actions',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
-            ),
-            SizedBox(height: 15),
-            GestureDetector(
+              const SizedBox(height: 15),
+              GestureDetector(
               onTap: () {
                 Navigator.push(
                   context,
@@ -84,48 +112,38 @@ class TurfHomeScreen extends StatelessWidget {
                 );
               },
               child: Container(
-                padding: EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(15),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black12,
-                      blurRadius: 10,
-                      offset: Offset(0, 5),
-                    ),
-                  ],
-                ),
+                padding: const EdgeInsets.all(20),
+                decoration: AppTheme.tintedCardDecoration(Colors.green),
                 child: Row(
                   children: [
                     Icon(Icons.stadium, size: 40, color: Colors.green),
-                    SizedBox(width: 20),
+                    const SizedBox(width: 20),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
+                          const Text(
                             'My Turfs',
                             style: TextStyle(
-                              fontWeight: FontWeight.bold,
+                              fontWeight: FontWeight.w700,
                               fontSize: 18,
                             ),
                           ),
-                          SizedBox(height: 5),
+                          const SizedBox(height: 5),
                           Text(
                             'View and manage your turfs',
-                            style: TextStyle(color: Colors.grey[600]),
+                            style: const TextStyle(color: AppTheme.mutedText),
                           ),
                         ],
                       ),
                     ),
-                    Icon(Icons.arrow_forward_ios),
+                    const Icon(Icons.arrow_forward_ios),
                   ],
                 ),
               ),
-            ),
-            SizedBox(height: 15),
-            GestureDetector(
+              ),
+              const SizedBox(height: 15),
+              GestureDetector(
               onTap: () {
                 final currentUser = AuthService().currentUser;
                 if (currentUser == null) return;
@@ -140,48 +158,38 @@ class TurfHomeScreen extends StatelessWidget {
                 );
               },
               child: Container(
-                padding: EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(15),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black12,
-                      blurRadius: 10,
-                      offset: Offset(0, 5),
-                    ),
-                  ],
-                ),
+                padding: const EdgeInsets.all(20),
+                decoration: AppTheme.tintedCardDecoration(Colors.blue),
                 child: Row(
                   children: [
                     Icon(Icons.add_business, size: 40, color: Colors.blue),
-                    SizedBox(width: 20),
+                    const SizedBox(width: 20),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
+                          const Text(
                             'Add Turf Details',
                             style: TextStyle(
-                              fontWeight: FontWeight.bold,
+                              fontWeight: FontWeight.w700,
                               fontSize: 18,
                             ),
                           ),
-                          SizedBox(height: 5),
+                          const SizedBox(height: 5),
                           Text(
                             'Register a new turf or complete missing details',
-                            style: TextStyle(color: Colors.grey[600]),
+                            style: const TextStyle(color: AppTheme.mutedText),
                           ),
                         ],
                       ),
                     ),
-                    Icon(Icons.arrow_forward_ios),
+                    const Icon(Icons.arrow_forward_ios),
                   ],
                 ),
               ),
-            ),
-            SizedBox(height: 15),
-            GestureDetector(
+              ),
+              const SizedBox(height: 15),
+              GestureDetector(
               onTap: () {
                 Navigator.push(
                   context,
@@ -189,47 +197,38 @@ class TurfHomeScreen extends StatelessWidget {
                 );
               },
               child: Container(
-                padding: EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(15),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black12,
-                      blurRadius: 10,
-                      offset: Offset(0, 5),
-                    ),
-                  ],
-                ),
+                padding: const EdgeInsets.all(20),
+                decoration: AppTheme.tintedCardDecoration(Colors.orange),
                 child: Row(
                   children: [
                     Icon(Icons.calendar_today, size: 40, color: Colors.orange),
-                    SizedBox(width: 20),
+                    const SizedBox(width: 20),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
+                          const Text(
                             'Bookings',
                             style: TextStyle(
-                              fontWeight: FontWeight.bold,
+                              fontWeight: FontWeight.w700,
                               fontSize: 18,
                             ),
                           ),
-                          SizedBox(height: 5),
+                          const SizedBox(height: 5),
                           Text(
                             'View match bookings for your turfs',
-                            style: TextStyle(color: Colors.grey[600]),
+                            style: const TextStyle(color: AppTheme.mutedText),
                           ),
                         ],
                       ),
                     ),
-                    Icon(Icons.arrow_forward_ios),
+                    const Icon(Icons.arrow_forward_ios),
                   ],
                 ),
               ),
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
