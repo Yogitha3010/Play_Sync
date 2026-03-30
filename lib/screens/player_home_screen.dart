@@ -316,7 +316,6 @@ class _PlayerHomeTabState extends State<PlayerHomeTab> {
                       child: _ActionCard(
                         icon: Icons.search,
                         title: 'Find Players',
-                        color: Colors.blue,
                         onTap: () {
                           Navigator.push(
                             context,
@@ -330,7 +329,6 @@ class _PlayerHomeTabState extends State<PlayerHomeTab> {
                       child: _ActionCard(
                         icon: Icons.map,
                         title: 'Find Turfs',
-                        color: Colors.indigo,
                         onTap: () {
                           Navigator.push(
                             context,
@@ -348,7 +346,6 @@ class _PlayerHomeTabState extends State<PlayerHomeTab> {
                       child: _ActionCard(
                         icon: Icons.add_circle,
                         title: 'Create Match',
-                        color: Colors.green,
                         onTap: () {
                           Navigator.push(
                             context,
@@ -368,7 +365,6 @@ class _PlayerHomeTabState extends State<PlayerHomeTab> {
                       child: _ActionCard(
                         icon: Icons.groups,
                         title: 'Teams',
-                        color: Colors.teal,
                         onTap: () {
                           Navigator.push(
                             context,
@@ -516,13 +512,11 @@ class _PlayerHomeTabState extends State<PlayerHomeTab> {
 class _ActionCard extends StatelessWidget {
   final IconData icon;
   final String title;
-  final Color color;
   final VoidCallback onTap;
 
   const _ActionCard({
     required this.icon,
     required this.title,
-    required this.color,
     required this.onTap,
   });
 
@@ -532,17 +526,17 @@ class _ActionCard extends StatelessWidget {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(20),
-        decoration: AppTheme.tintedCardDecoration(color),
+        decoration: AppTheme.tintedCardDecoration(AppTheme.secondary),
         child: Column(
           children: [
             Container(
               width: 58,
               height: 58,
               decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.14),
+                color: AppTheme.primary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(18),
               ),
-              child: Icon(icon, size: 30, color: color),
+              child: Icon(icon, size: 30, color: AppTheme.primary),
             ),
             const SizedBox(height: 14),
             Text(
@@ -550,6 +544,7 @@ class _ActionCard extends StatelessWidget {
               style: const TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 14,
+                color: AppTheme.primary,
               ),
               textAlign: TextAlign.center,
             ),

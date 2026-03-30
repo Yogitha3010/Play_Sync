@@ -96,6 +96,27 @@ class TurfHomeScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 30),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(18),
+                decoration: AppTheme.surfaceCardDecoration(elevated: false),
+                child: const Row(
+                  children: [
+                    Icon(
+                      Icons.palette_outlined,
+                      color: AppTheme.secondary,
+                    ),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Your owner tools now follow the same PlaySync theme used on login and player screens.',
+                        style: TextStyle(color: AppTheme.mutedText),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
               const Text(
                 'Quick Actions',
                 style: TextStyle(
@@ -104,131 +125,114 @@ class TurfHomeScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 15),
-              GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => MyTurfsScreen()),
-                );
-              },
-              child: Container(
-                padding: const EdgeInsets.all(20),
-                decoration: AppTheme.tintedCardDecoration(Colors.green),
-                child: Row(
-                  children: [
-                    Icon(Icons.stadium, size: 40, color: Colors.green),
-                    const SizedBox(width: 20),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'My Turfs',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 18,
-                            ),
-                          ),
-                          const SizedBox(height: 5),
-                          Text(
-                            'View and manage your turfs',
-                            style: const TextStyle(color: AppTheme.mutedText),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.arrow_forward_ios),
-                  ],
-                ),
-              ),
+              _OwnerActionCard(
+                icon: Icons.stadium,
+                title: 'My Turfs',
+                subtitle: 'View and manage your turfs',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => MyTurfsScreen()),
+                  );
+                },
               ),
               const SizedBox(height: 15),
-              GestureDetector(
-              onTap: () {
-                final currentUser = AuthService().currentUser;
-                if (currentUser == null) return;
+              _OwnerActionCard(
+                icon: Icons.add_business,
+                title: 'Add Turf Details',
+                subtitle: 'Register a new turf or complete missing details',
+                onTap: () {
+                  final currentUser = AuthService().currentUser;
+                  if (currentUser == null) return;
 
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => TurfProfileSetupScreen(
-                      ownerId: currentUser.uid,
-                    ),
-                  ),
-                );
-              },
-              child: Container(
-                padding: const EdgeInsets.all(20),
-                decoration: AppTheme.tintedCardDecoration(Colors.blue),
-                child: Row(
-                  children: [
-                    Icon(Icons.add_business, size: 40, color: Colors.blue),
-                    const SizedBox(width: 20),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Add Turf Details',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 18,
-                            ),
-                          ),
-                          const SizedBox(height: 5),
-                          Text(
-                            'Register a new turf or complete missing details',
-                            style: const TextStyle(color: AppTheme.mutedText),
-                          ),
-                        ],
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => TurfProfileSetupScreen(
+                        ownerId: currentUser.uid,
                       ),
                     ),
-                    const Icon(Icons.arrow_forward_ios),
-                  ],
-                ),
-              ),
+                  );
+                },
               ),
               const SizedBox(height: 15),
-              GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => TurfOwnerBookingsScreen()),
-                );
-              },
-              child: Container(
-                padding: const EdgeInsets.all(20),
-                decoration: AppTheme.tintedCardDecoration(Colors.orange),
-                child: Row(
-                  children: [
-                    Icon(Icons.calendar_today, size: 40, color: Colors.orange),
-                    const SizedBox(width: 20),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Bookings',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 18,
-                            ),
-                          ),
-                          const SizedBox(height: 5),
-                          Text(
-                            'View match bookings for your turfs',
-                            style: const TextStyle(color: AppTheme.mutedText),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.arrow_forward_ios),
-                  ],
-                ),
-              ),
+              _OwnerActionCard(
+                icon: Icons.calendar_today,
+                title: 'Bookings',
+                subtitle: 'View match bookings for your turfs',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => TurfOwnerBookingsScreen()),
+                  );
+                },
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OwnerActionCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _OwnerActionCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: AppTheme.tintedCardDecoration(AppTheme.secondary),
+        child: Row(
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Icon(icon, size: 28, color: AppTheme.primary),
+            ),
+            const SizedBox(width: 18),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 18,
+                      color: AppTheme.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(color: AppTheme.mutedText),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.arrow_forward_ios,
+              size: 16,
+              color: AppTheme.primary,
+            ),
+          ],
         ),
       ),
     );
