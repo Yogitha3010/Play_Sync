@@ -50,7 +50,7 @@ class RoleSelectionScreen extends StatelessWidget {
                         ),
                         SizedBox(height: 12),
                         Text(
-                          "A sharper way to organize games, players, and turf bookings.",
+                          "organize games, players, and turf bookings.",
                           style: TextStyle(
                             fontSize: 16,
                             height: 1.45,
@@ -76,7 +76,7 @@ class RoleSelectionScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    "Everything stays the same under the hood. The experience just feels cleaner, more premium, and easier to trust.",
+                    "Continue as Player or Turf Owner",
                     style: TextStyle(
                       color: AppTheme.mutedText,
                       fontSize: 15,
@@ -100,7 +100,7 @@ class RoleSelectionScreen extends StatelessWidget {
                     padding: const EdgeInsets.all(18),
                     decoration: AppTheme.surfaceCardDecoration(elevated: false),
                     child: const Text(
-                      "Find players. Build teams. Manage matches and bookings in one polished flow.",
+                      "Find players. Build teams. Manage matches and bookings in one place.",
                       textAlign: TextAlign.center,
                       style: TextStyle(color: AppTheme.mutedText, height: 1.4),
                     ),

@@ -99,7 +99,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                   return Center(
                     child: Text(
-                      'No messages yet.\\nStart the conversation!',
+                      'No messages yet.\nStart the conversation!',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.grey[600]),
                     ),

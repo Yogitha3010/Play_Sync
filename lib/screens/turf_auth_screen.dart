@@ -183,7 +183,7 @@ class _TurfLoginScreenState extends State<TurfLoginScreen> {
                             ),
                             SizedBox(height: 8),
                             Text(
-                              "Login to manage your turf operations with a more polished dashboard.",
+                              "Login to manage your turf operations.",
                               style: TextStyle(
                                 color: Colors.white,
                                 height: 1.4,

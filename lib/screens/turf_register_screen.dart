@@ -147,7 +147,7 @@ class _TurfRegisterScreenState extends State<TurfRegisterScreen> {
                             ),
                             SizedBox(height: 8),
                             Text(
-                              "Register your turf and start accepting bookings with a stronger, more premium interface.",
+                              "Register your turf and start accepting bookings.",
                               style: TextStyle(color: Colors.white, height: 1.4),
                             ),
                           ],

@@ -165,7 +165,7 @@ class _PlayerLoginScreenState extends State<PlayerLoginScreen> {
                             ),
                             SizedBox(height: 8),
                             Text(
-                              "Login to continue playing with a cleaner, faster experience.",
+                              "Login to continue playing.",
                               style: TextStyle(
                                 color: Colors.white,
                                 height: 1.4,

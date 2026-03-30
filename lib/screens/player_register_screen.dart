@@ -143,7 +143,7 @@ class _PlayerRegisterScreenState extends State<PlayerRegisterScreen> {
                             ),
                             SizedBox(height: 8),
                             Text(
-                              "Join PlaySync and start playing with a sharper, more professional experience.",
+                              "Join PlaySync and start playing.",
                               style: TextStyle(color: Colors.white, height: 1.4),
                             ),
                           ],
