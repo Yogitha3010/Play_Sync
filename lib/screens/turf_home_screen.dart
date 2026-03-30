@@ -102,14 +102,11 @@ class TurfHomeScreen extends StatelessWidget {
                 decoration: AppTheme.surfaceCardDecoration(elevated: false),
                 child: const Row(
                   children: [
-                    Icon(
-                      Icons.palette_outlined,
-                      color: AppTheme.secondary,
-                    ),
+                    Icon(Icons.palette_outlined, color: AppTheme.secondary),
                     SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        'Your owner tools now follow the same PlaySync theme used on login and player screens.',
+                        'Manage and personalize your turf to provide the best experience for players',
                         style: TextStyle(color: AppTheme.mutedText),
                       ),
                     ),
@@ -119,10 +116,7 @@ class TurfHomeScreen extends StatelessWidget {
               const SizedBox(height: 24),
               const Text(
                 'Quick Actions',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                ),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 15),
               _OwnerActionCard(
@@ -148,9 +142,8 @@ class TurfHomeScreen extends StatelessWidget {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => TurfProfileSetupScreen(
-                        ownerId: currentUser.uid,
-                      ),
+                      builder: (_) =>
+                          TurfProfileSetupScreen(ownerId: currentUser.uid),
                     ),
                   );
                 },
@@ -163,7 +156,9 @@ class TurfHomeScreen extends StatelessWidget {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => TurfOwnerBookingsScreen()),
+                    MaterialPageRoute(
+                      builder: (_) => TurfOwnerBookingsScreen(),
+                    ),
                   );
                 },
               ),

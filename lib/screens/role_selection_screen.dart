@@ -60,7 +60,7 @@ class RoleSelectionScreen extends StatelessWidget {
                         SizedBox(height: 20),
                         _HeroBadge(
                           icon: Icons.bolt_rounded,
-                          label: "Dual-tone sports management",
+                          label: "Find Your Team",
                         ),
                       ],
                     ),
@@ -102,10 +102,7 @@ class RoleSelectionScreen extends StatelessWidget {
                     child: const Text(
                       "Find players. Build teams. Manage matches and bookings in one polished flow.",
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: AppTheme.mutedText,
-                        height: 1.4,
-                      ),
+                      style: TextStyle(color: AppTheme.mutedText, height: 1.4),
                     ),
                   ),
                 ],
@@ -122,10 +119,7 @@ class _HeroBadge extends StatelessWidget {
   final IconData icon;
   final String label;
 
-  const _HeroBadge({
-    required this.icon,
-    required this.label,
-  });
+  const _HeroBadge({required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {
