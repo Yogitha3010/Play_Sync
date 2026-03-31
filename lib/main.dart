@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+
 import 'firebase_options.dart';
 import 'models/user_model.dart';
+import 'screens/animated_splash_screen.dart';
 import 'screens/player_home_screen.dart';
 import 'screens/role_selection_screen.dart';
 import 'screens/turf_home_screen.dart';
 import 'screens/turf_profile_setup_screen.dart';
 import 'services/auth_service.dart';
 import 'services/firestore_service.dart';
+import 'services/push_notification_service.dart';
 import 'theme/app_theme.dart';
+
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,25 +23,29 @@ void main() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
   }
-  runApp(PlaySyncApp());
+  await PushNotificationService.instance.initialize(
+    navigatorKey: appNavigatorKey,
+  );
+  runApp(const PlaySyncApp());
 }
 
 class PlaySyncApp extends StatelessWidget {
-  const PlaySyncApp({Key? key}) : super(key: key);
-  
+  const PlaySyncApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: appNavigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'PlaySync',
       theme: AppTheme.theme,
-      home: AuthGate(),
+      home: const AnimatedSplashScreen(),
     );
   }
 }
 
 class AuthGate extends StatelessWidget {
-  AuthGate({Key? key}) : super(key: key);
+  AuthGate({super.key});
 
   final AuthService _authService = AuthService();
   final FirestoreService _firestoreService = FirestoreService();
@@ -47,7 +56,9 @@ class AuthGate extends StatelessWidget {
       stream: _authService.authStateChanges,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return Scaffold(body: Center(child: CircularProgressIndicator()));
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
 
         final user = snapshot.data;
@@ -63,7 +74,9 @@ class AuthGate extends StatelessWidget {
           future: _resolveTarget(user.uid),
           builder: (context, targetSnapshot) {
             if (targetSnapshot.connectionState == ConnectionState.waiting) {
-              return Scaffold(body: Center(child: CircularProgressIndicator()));
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
             }
 
             final target = targetSnapshot.data;

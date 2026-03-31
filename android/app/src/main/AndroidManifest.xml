@@ -1,8 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:label="playsync"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyBaCUHYS-0dKfKVTS9M5aqtWAz2U0oX7ko" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -43,3 +48,6 @@
         </intent>
     </queries>
 </manifest>
+
+
+

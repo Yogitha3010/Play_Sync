@@ -21,4 +21,6 @@ class FirebaseService {
       firestore.collection('bookingSlots');
   static CollectionReference get playRequestsCollection =>
       firestore.collection('playRequests');
+  static CollectionReference get notificationsCollection =>
+      firestore.collection('notifications');
 }

@@ -60,9 +60,24 @@ service cloud.firestore {
     match /matches/{matchId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null;
-      allow update: if request.auth != null && 
-        (resource.data.createdBy == request.auth.uid || 
-         resource.data.players.hasAny([request.auth.uid]));
+      allow update: if request.auth != null &&
+        (resource.data.createdBy == request.auth.uid ||
+         (
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['players']) &&
+           (
+             (
+               request.resource.data.players.hasAll(resource.data.players) &&
+               request.resource.data.players.hasAny([request.auth.uid]) &&
+               request.resource.data.players.size() == resource.data.players.size() + 1 &&
+               request.resource.data.players.size() <= resource.data.maxPlayers
+             ) ||
+             (
+               resource.data.players.hasAny([request.auth.uid]) &&
+               resource.data.players.hasAll(request.resource.data.players) &&
+               request.resource.data.players.size() + 1 == resource.data.players.size()
+             )
+           )
+         ));
     }
     
     // Feedback

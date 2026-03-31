@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+
 import '../models/turf_model.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import 'available_matches_screen.dart';
+import 'chennai_location_picker_screen.dart';
 import 'create_match_screen.dart';
 import 'find_players_screen.dart';
 import 'my_matches_screen.dart';
@@ -13,20 +15,30 @@ import 'turf_detail_screen.dart';
 import 'turfs_screen.dart';
 
 class PlayerHomeScreen extends StatefulWidget {
+  final int initialIndex;
+
+  const PlayerHomeScreen({super.key, this.initialIndex = 0});
+
   @override
-  _PlayerHomeScreenState createState() => _PlayerHomeScreenState();
+  State<PlayerHomeScreen> createState() => _PlayerHomeScreenState();
 }
 
 class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
-  int _currentIndex = 0;
+  late int _currentIndex;
 
   final List<Widget> _screens = [
-    PlayerHomeTab(),
+    const PlayerHomeTab(),
     const FindPlayersScreen(),
     const AvailableMatchesScreen(),
     MyMatchesScreen(),
     const RequestsScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -78,16 +90,28 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
 }
 
 class PlayerHomeTab extends StatefulWidget {
+  const PlayerHomeTab({super.key});
+
   @override
   State<PlayerHomeTab> createState() => _PlayerHomeTabState();
 }
 
 class _PlayerHomeTabState extends State<PlayerHomeTab> {
+  static const Set<String> _genericLocationWords = {
+    'chennai',
+    'tamil',
+    'nadu',
+    'india',
+    'district',
+    'city',
+  };
+
   final FirestoreService _firestoreService = FirestoreService();
 
   List<TurfModel> _allTurfs = [];
-  List<String> _locations = [];
-  String? _selectedLocation;
+  List<String> _knownLocations = [];
+  String? _selectedLocationLabel;
+  String? _selectedLocationQuery;
   bool _isLoadingTurfs = true;
   String _turfErrorMessage = '';
 
@@ -105,22 +129,26 @@ class _PlayerHomeTabState extends State<PlayerHomeTab> {
 
     try {
       final turfs = await _firestoreService.searchTurfs();
-      final locations = turfs
+      final knownLocations = turfs
           .map((turf) => turf.location.trim())
           .where((location) => location.isNotEmpty)
           .toSet()
           .toList()
         ..sort();
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _allTurfs = turfs;
-        _locations = locations;
+        _knownLocations = knownLocations;
         _isLoadingTurfs = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _turfErrorMessage = 'Failed to load turfs: $e';
@@ -130,13 +158,102 @@ class _PlayerHomeTabState extends State<PlayerHomeTab> {
   }
 
   List<TurfModel> get _filteredTurfs {
-    if (_selectedLocation == null || _selectedLocation!.isEmpty) {
+    final query = _selectedLocationQuery;
+    if (query == null || query.trim().isEmpty) {
       return [];
     }
 
     return _allTurfs
-        .where((turf) => turf.location.trim() == _selectedLocation)
+        .where((turf) => _matchesLocation(turf.location, query))
         .toList();
+  }
+
+  Future<void> _pickLocationOnMap() async {
+    final result = await Navigator.push<ChennaiLocationSelection>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChennaiLocationPickerScreen(
+          initialLabel: _selectedLocationLabel,
+        ),
+      ),
+    );
+
+    if (!mounted || result == null) {
+      return;
+    }
+
+    final matchedLocation = _findBestLocationMatch(result.label);
+    setState(() {
+      _selectedLocationLabel = result.label;
+      _selectedLocationQuery = matchedLocation ?? result.label;
+    });
+  }
+
+  void _clearLocation() {
+    setState(() {
+      _selectedLocationLabel = null;
+      _selectedLocationQuery = null;
+    });
+  }
+
+  String? _findBestLocationMatch(String label) {
+    final normalizedLabel = _normalizeLocation(label);
+    final labelTokens = _extractLocationTokens(label);
+
+    for (final location in _knownLocations) {
+      final normalizedLocation = _normalizeLocation(location);
+      if (normalizedLocation == normalizedLabel ||
+          normalizedLocation.contains(normalizedLabel) ||
+          normalizedLabel.contains(normalizedLocation)) {
+        return location;
+      }
+    }
+
+    for (final location in _knownLocations) {
+      final tokens = _extractLocationTokens(location);
+      if (labelTokens.isNotEmpty && tokens.any(labelTokens.contains)) {
+        return location;
+      }
+    }
+
+    return null;
+  }
+
+  bool _matchesLocation(String turfLocation, String query) {
+    final normalizedTurfLocation = _normalizeLocation(turfLocation);
+    final normalizedQuery = _normalizeLocation(query);
+
+    if (normalizedTurfLocation == normalizedQuery ||
+        normalizedTurfLocation.contains(normalizedQuery) ||
+        normalizedQuery.contains(normalizedTurfLocation)) {
+      return true;
+    }
+
+    final turfTokens = _extractLocationTokens(turfLocation);
+    final queryTokens = _extractLocationTokens(query);
+    if (queryTokens.isEmpty) {
+      return false;
+    }
+
+    return queryTokens.any(turfTokens.contains);
+  }
+
+  String _normalizeLocation(String value) {
+    return value
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+        .trim()
+        .replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  Set<String> _extractLocationTokens(String value) {
+    return _normalizeLocation(value)
+        .split(' ')
+        .where(
+          (token) =>
+              token.length > 2 && !_genericLocationWords.contains(token),
+        )
+        .toSet();
   }
 
   void _openTurfDetail(TurfModel turf) {
@@ -157,6 +274,11 @@ class _PlayerHomeTabState extends State<PlayerHomeTab> {
       appBar: AppBar(
         title: const Text('PlaySync'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.location_on_outlined),
+            tooltip: 'Pick Chennai location',
+            onPressed: _pickLocationOnMap,
+          ),
           IconButton(
             icon: const Icon(Icons.person_outline),
             onPressed: () {
@@ -204,101 +326,76 @@ class _PlayerHomeTabState extends State<PlayerHomeTab> {
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        'Find players, create matches, and sync your game!',
+                        'Pick a Chennai location and explore nearby turfs, matches, and players.',
                         style: TextStyle(
                           fontSize: 16,
                           color: Colors.white.withValues(alpha: 0.92),
                         ),
                       ),
                       const SizedBox(height: 18),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.flash_on_rounded,
-                              color: Colors.white,
-                              size: 18,
-                            ),
-                            SizedBox(width: 8),
-                            Text(
-                              'Discover games faster',
-                              style: TextStyle(
+                      GestureDetector(
+                        onTap: _pickLocationOnMap,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.place_rounded,
                                 color: Colors.white,
-                                fontWeight: FontWeight.w600,
+                                size: 18,
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  _selectedLocationLabel ??
+                                      'Tap to search or select a Chennai location',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
+                      if (_selectedLocationLabel != null) ...[
+                        const SizedBox(height: 10),
+                        TextButton.icon(
+                          onPressed: _clearLocation,
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.white,
+                          ),
+                          icon: const Icon(Icons.clear),
+                          label: const Text('Clear selected location'),
+                        ),
+                      ],
                     ],
                   ),
                 ),
                 const SizedBox(height: 30),
                 const Text(
-                  'Find Turfs by Location',
+                  'Nearby Turfs',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'Choose a location to see available turfs. Other options are below.',
-                  style: TextStyle(color: AppTheme.mutedText),
+                Text(
+                  _selectedLocationLabel == null
+                      ? 'Use the location pin to search or select an area in Chennai.'
+                      : 'Showing turfs that match ${_selectedLocationLabel!}.',
+                  style: const TextStyle(color: AppTheme.mutedText),
                 ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  decoration: AppTheme.surfaceCardDecoration(),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: _selectedLocation,
-                      isExpanded: true,
-                      hint: const Text('Select Location'),
-                      icon: const Icon(
-                        Icons.keyboard_arrow_down_rounded,
-                        color: AppTheme.primary,
-                      ),
-                      items: _locations.map((location) {
-                        return DropdownMenuItem<String>(
-                          value: location,
-                          child: Text(
-                            location,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: _locations.isEmpty
-                          ? null
-                          : (value) {
-                              setState(() {
-                                _selectedLocation = value;
-                              });
-                            },
-                    ),
-                  ),
-                ),
-                if (_selectedLocation != null) ...[
-                  const SizedBox(height: 10),
-                  TextButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        _selectedLocation = null;
-                      });
-                    },
-                    icon: const Icon(Icons.clear),
-                    label: const Text('Clear location'),
-                  ),
-                ],
                 const SizedBox(height: 16),
                 _buildTurfSection(),
                 const SizedBox(height: 30),
@@ -319,7 +416,9 @@ class _PlayerHomeTabState extends State<PlayerHomeTab> {
                         onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (_) => FindPlayersScreen()),
+                            MaterialPageRoute(
+                              builder: (_) => const FindPlayersScreen(),
+                            ),
                           );
                         },
                       ),
@@ -409,10 +508,10 @@ class _PlayerHomeTabState extends State<PlayerHomeTab> {
               _turfErrorMessage,
               style: TextStyle(color: Colors.red[700]),
             ),
-            SizedBox(height: 12),
+            const SizedBox(height: 12),
             TextButton(
               onPressed: _loadTurfs,
-              child: Text('Retry'),
+              child: const Text('Retry'),
             ),
           ],
         ),
@@ -423,14 +522,16 @@ class _PlayerHomeTabState extends State<PlayerHomeTab> {
       return _buildTurfMessageCard('No turfs available right now.');
     }
 
-    if (_selectedLocation == null) {
+    if (_selectedLocationQuery == null || _selectedLocationQuery!.isEmpty) {
       return _buildTurfMessageCard(
-        'Select a location to view available turfs in that area.',
+        'Search or select a Chennai location from the map to see nearby turfs.',
       );
     }
 
     if (_filteredTurfs.isEmpty) {
-      return _buildTurfMessageCard('No turfs found for $_selectedLocation.');
+      return _buildTurfMessageCard(
+        'No turfs found for ${_selectedLocationLabel ?? _selectedLocationQuery}.',
+      );
     }
 
     return Column(
@@ -483,7 +584,7 @@ class _PlayerHomeTabState extends State<PlayerHomeTab> {
               const SizedBox(height: 8),
               Text(
                 'Rs ${turf.pricePerHour.toInt()}/hr',
-                style: TextStyle(
+                style: const TextStyle(
                   color: AppTheme.secondary,
                   fontWeight: FontWeight.w700,
                 ),
@@ -494,7 +595,7 @@ class _PlayerHomeTabState extends State<PlayerHomeTab> {
                 runSpacing: 6,
                 children: turf.gamesAvailable.map((game) {
                   return Chip(
-                    label: Text(game, style: TextStyle(fontSize: 12)),
+                    label: Text(game, style: const TextStyle(fontSize: 12)),
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   );
                 }).toList(),

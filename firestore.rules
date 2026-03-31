@@ -13,60 +13,127 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // users collection — each user can read/write their own document
+    function isPlayRequestParticipant() {
+      return isAuthenticated() &&
+        (resource.data.fromUserId == request.auth.uid ||
+         resource.data.toUserId == request.auth.uid);
+    }
+
+    function isCreatingOwnPlayRequest() {
+      return isAuthenticated() &&
+        request.resource.data.fromUserId == request.auth.uid;
+    }
+
+    function isPlayRequestRecipientStatusUpdate() {
+      let changedKeys = request.resource.data.diff(resource.data).affectedKeys();
+      return isAuthenticated() &&
+        resource.data.toUserId == request.auth.uid &&
+        request.resource.data.fromUserId == resource.data.fromUserId &&
+        request.resource.data.toUserId == resource.data.toUserId &&
+        request.resource.data.requestId == resource.data.requestId &&
+        request.resource.data.gameType == resource.data.gameType &&
+        request.resource.data.turfId == resource.data.turfId &&
+        request.resource.data.date == resource.data.date &&
+        request.resource.data.slotTime == resource.data.slotTime &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        changedKeys.hasOnly(['status']) &&
+        request.resource.data.status in ['accepted', 'rejected'];
+    }
+
+    function isNotificationRecipient() {
+      return isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    function isValidMatchPlayerUpdate() {
+      let changedKeys = request.resource.data.diff(resource.data).affectedKeys();
+      let currentPlayers = resource.data.players;
+      let nextPlayers = request.resource.data.players;
+
+      let isJoiningSelf =
+        nextPlayers.hasAll(currentPlayers) &&
+        nextPlayers.hasAny([request.auth.uid]) &&
+        nextPlayers.size() == currentPlayers.size() + 1 &&
+        nextPlayers.size() <= resource.data.maxPlayers;
+
+      let isLeavingSelf =
+        currentPlayers.hasAny([request.auth.uid]) &&
+        currentPlayers.hasAll(nextPlayers) &&
+        nextPlayers.size() + 1 == currentPlayers.size();
+
+      return changedKeys.hasOnly(['players']) && (isJoiningSelf || isLeavingSelf);
+    }
+
+    // users collection - each user can read/write their own document
     match /users/{userId} {
       allow read, write: if isOwner(userId);
     }
 
-    // playerProfiles — owners can write their own; any authenticated user can read
+    // playerProfiles - owners can write their own; any authenticated user can read
     match /playerProfiles/{userId} {
       allow read: if isAuthenticated();
       allow write: if isOwner(userId);
     }
 
-    // turfs — turf owners manage their own turfs; any authenticated user can read
+    // turfs - turf owners manage their own turfs; any authenticated user can read
     match /turfs/{turfId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated();
       allow update, delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
     }
 
-    // bookings — any authenticated user can read/create; only owner can update/delete
+    // bookings - any authenticated user can read/create; only owner can update/delete
     match /bookings/{bookingId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated();
       allow update, delete: if isAuthenticated() && resource.data.playerId == request.auth.uid;
     }
 
-    // bookingSlots — authenticated users can read; turf owner can write
+    // bookingSlots - authenticated users can read; turf owner can write
     match /bookingSlots/{slotId} {
       allow read: if isAuthenticated();
       allow write: if isAuthenticated();
     }
 
-    // matches — any authenticated user can read; participants/creator can write
+    // matches - any authenticated user can read; players can join/leave themselves; creator can manage
     match /matches/{matchId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated();
-      allow update, delete: if isAuthenticated() && resource.data.createdBy == request.auth.uid;
+      allow update: if isAuthenticated() &&
+        (resource.data.createdBy == request.auth.uid || isValidMatchPlayerUpdate());
+      allow delete: if isAuthenticated() && resource.data.createdBy == request.auth.uid;
     }
 
-    // playRequests — authenticated users can read/write
+    // playRequests - direct document access is limited to participants.
+    // Collection queries power the Requests screen, so authenticated users
+    // can list and the UI filters by toUserId/fromUserId in the query.
     match /playRequests/{requestId} {
-      allow read, write: if isAuthenticated();
+      allow get: if isPlayRequestParticipant();
+      allow list: if isAuthenticated();
+      allow create: if isCreatingOwnPlayRequest();
+      allow update: if isPlayRequestRecipientStatusUpdate();
+      allow delete: if false;
     }
 
-    // feedback — authenticated users can read/write
+    // feedback - authenticated users can read/write
     match /feedback/{feedbackId} {
       allow read, write: if isAuthenticated();
     }
 
-    // chats — authenticated users can read/write
+    // notifications - direct document access is limited to the recipient.
+    // The Requests screen queries notifications by userId, so collection
+    // listing is allowed for authenticated users and narrowed in the client query.
+    match /notifications/{notificationId} {
+      allow create: if isAuthenticated();
+      allow get, update, delete: if isNotificationRecipient();
+      allow list: if isAuthenticated();
+    }
+
+    // chats - authenticated users can read/write
     match /chats/{chatId} {
       allow read, write: if isAuthenticated();
     }
 
-    // teams — authenticated users can read; creator can write
+    // teams - authenticated users can read; creator can write
     match /teams/{teamId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated();

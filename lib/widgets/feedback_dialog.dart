@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
+
 import '../models/feedback_model.dart';
 import '../models/player_profile_model.dart';
 import '../services/auth_service.dart';
@@ -48,16 +50,17 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
 
       for (var entry in ratings.entries) {
         final feedback = FeedbackModel(
-          feedbackId: DateTime.now().millisecondsSinceEpoch.toString() + entry.key,
+          feedbackId: const Uuid().v4(),
           matchId: widget.matchId,
-          fromPlayerId: currentUserId,
-          toPlayerId: entry.key,
+          fromUserId: currentUserId,
+          toUserId: entry.key,
           rating: entry.value,
-          comments: comments[entry.key],
+          comment: comments[entry.key],
           gameType: widget.gameType,
           createdAt: DateTime.now(),
         );
-        await _firestoreService.submitFeedback(feedback);
+        await _firestoreService.createFeedback(feedback);
+        await _firestoreService.refreshPlayerRating(entry.key);
       }
 
       if (!mounted) return;
@@ -144,3 +147,4 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
     );
   }
 }
+

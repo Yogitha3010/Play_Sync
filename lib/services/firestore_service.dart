@@ -8,6 +8,7 @@ import '../models/feedback_model.dart';
 import '../models/team_model.dart';
 import '../models/booking_model.dart';
 import '../models/play_request_model.dart';
+import '../models/app_notification_model.dart';
 import 'firebase_service.dart';
 
 class BookingConflictException implements Exception {
@@ -137,6 +138,18 @@ class FirestoreService {
 
   Future<void> updateMatch(String matchId, Map<String, dynamic> updates) async {
     await FirebaseService.matchesCollection.doc(matchId).update(updates);
+  }
+
+  Future<void> joinMatch(String matchId, String playerId) async {
+    await FirebaseService.matchesCollection.doc(matchId).update({
+      'players': FieldValue.arrayUnion([playerId]),
+    });
+  }
+
+  Future<void> leaveMatch(String matchId, String playerId) async {
+    await FirebaseService.matchesCollection.doc(matchId).update({
+      'players': FieldValue.arrayRemove([playerId]),
+    });
   }
 
   Stream<MatchModel> streamMatch(String matchId) {
@@ -496,8 +509,9 @@ class FirestoreService {
 
     final requests = snapshot.docs
         .map((doc) => PlayRequestModel.fromMap(doc.data() as Map<String, dynamic>))
-        .toList();
-    requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
     return requests;
   }
 
@@ -508,8 +522,9 @@ class FirestoreService {
 
     final requests = snapshot.docs
         .map((doc) => PlayRequestModel.fromMap(doc.data() as Map<String, dynamic>))
-        .toList();
-    requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
     return requests;
   }
 
@@ -517,9 +532,83 @@ class FirestoreService {
     String requestId,
     String status,
   ) async {
-    await FirebaseService.playRequestsCollection.doc(requestId).update({
+    final requestRef = FirebaseService.playRequestsCollection.doc(requestId);
+    final requestDoc = await requestRef.get();
+    if (!requestDoc.exists) {
+      throw Exception('Play request not found.');
+    }
+
+    final request = PlayRequestModel.fromMap(
+      requestDoc.data() as Map<String, dynamic>,
+    );
+
+    await requestRef.update({
       'status': status,
     });
+  }
+
+  Future<void> saveDeviceToken(String userId, String token) async {
+    await FirebaseService.usersCollection.doc(userId).set({
+      'userId': userId,
+      'fcmTokens': FieldValue.arrayUnion([token]),
+      'lastTokenUpdatedAt': DateTime.now().toIso8601String(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> removeDeviceToken(String userId, String token) async {
+    await FirebaseService.usersCollection.doc(userId).set({
+      'userId': userId,
+      'fcmTokens': FieldValue.arrayRemove([token]),
+      'lastTokenUpdatedAt': DateTime.now().toIso8601String(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> createNotification(AppNotificationModel notification) async {
+    await FirebaseService.notificationsCollection
+        .doc(notification.notificationId)
+        .set(notification.toMap());
+  }
+
+  Future<List<AppNotificationModel>> getNotificationsForUser(
+    String userId,
+  ) async {
+    final snapshot = await FirebaseService.notificationsCollection
+        .where('userId', isEqualTo: userId)
+        .get();
+
+    final notifications = snapshot.docs
+        .map(
+          (doc) => AppNotificationModel.fromMap(doc.data() as Map<String, dynamic>),
+        )
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+    return notifications;
+  }
+
+  Stream<int> streamUnreadNotificationCount(String userId) {
+    return FirebaseService.notificationsCollection
+        .where('userId', isEqualTo: userId)
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            return data['isRead'] == false;
+          }).length,
+        );
+  }
+
+  Future<void> markNotificationsAsRead(String userId) async {
+    final snapshot = await FirebaseService.notificationsCollection
+        .where('userId', isEqualTo: userId)
+        .get();
+
+    for (final doc in snapshot.docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      if (data['isRead'] == false) {
+        await doc.reference.update({'isRead': true});
+      }
+    }
   }
 
   // Booking Operations

@@ -32,6 +32,25 @@ class _RequestsScreenState extends State<RequestsScreen> {
     _loadRequests();
   }
 
+  String _displayName(PlayerProfileModel? profile) {
+    final name = (profile?.name ?? '').trim();
+    if (name.isNotEmpty) {
+      return name;
+    }
+
+    final username = (profile?.username ?? '').trim();
+    if (username.isNotEmpty) {
+      return username;
+    }
+
+    return 'Player';
+  }
+
+  String _avatarInitial(PlayerProfileModel? profile) {
+    final label = _displayName(profile).trim();
+    return label.isNotEmpty ? label.substring(0, 1).toUpperCase() : 'P';
+  }
+
   Future<void> _loadRequests() async {
     setState(() => isLoading = true);
     try {
@@ -57,11 +76,22 @@ class _RequestsScreenState extends State<RequestsScreen> {
         ...outgoing.map((item) => item.turfId),
       };
 
+      _profiles.clear();
+      _turfs.clear();
+
       for (final userId in userIds) {
-        _profiles[userId] = await _firestoreService.getPlayerProfile(userId);
+        try {
+          _profiles[userId] = await _firestoreService.getPlayerProfile(userId);
+        } catch (_) {
+          _profiles[userId] = null;
+        }
       }
       for (final turfId in turfIds) {
-        _turfs[turfId] = await _firestoreService.getTurf(turfId);
+        try {
+          _turfs[turfId] = await _firestoreService.getTurf(turfId);
+        } catch (_) {
+          _turfs[turfId] = null;
+        }
       }
 
       if (!mounted) {
@@ -222,11 +252,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
                   Row(
                     children: [
                       CircleAvatar(
-                        child: Text(
-                          (profile?.name ?? profile?.username ?? 'P')
-                              .substring(0, 1)
-                              .toUpperCase(),
-                        ),
+                        child: Text(_avatarInitial(profile)),
                       ),
                       SizedBox(width: 12),
                       Expanded(
@@ -234,7 +260,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              profile?.name ?? profile?.username ?? 'Player',
+                              _displayName(profile),
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,

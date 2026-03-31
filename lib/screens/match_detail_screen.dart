@@ -150,14 +150,9 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
         }
       }
 
-      List<String> updatedPlayers = List.from(match!.players);
-      updatedPlayers.add(currentUser.uid);
+      await _firestoreService.joinMatch(widget.matchId, currentUser.uid);
 
-      await _firestoreService.updateMatch(widget.matchId, {
-        'players': updatedPlayers,
-      });
-
-      _loadMatch();
+      await _loadMatch();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error joining match: $e')),
@@ -174,14 +169,9 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
         return;
       }
 
-      List<String> updatedPlayers = List.from(match!.players);
-      updatedPlayers.remove(currentUser.uid);
+      await _firestoreService.leaveMatch(widget.matchId, currentUser.uid);
 
-      await _firestoreService.updateMatch(widget.matchId, {
-        'players': updatedPlayers,
-      });
-
-      _loadMatch();
+      await _loadMatch();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error leaving match: $e')),

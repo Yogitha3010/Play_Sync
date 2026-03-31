@@ -5,6 +5,7 @@ import '../models/user_model.dart';
 import '../models/player_profile_model.dart';
 import 'firebase_service.dart';
 import 'firestore_service.dart';
+import 'push_notification_service.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -143,6 +144,20 @@ class AuthService {
 
   // Logout
   Future<void> logout() async {
+    try {
+      await PushNotificationService.instance.unregisterCurrentDevice();
+    } catch (e) {
+      debugPrint('Skipping device unregister during logout: $e');
+    }
+
+    try {
+      if (!kIsWeb) {
+        await GoogleSignIn.instance.disconnect();
+      }
+    } catch (e) {
+      debugPrint('Google disconnect skipped during logout: $e');
+    }
+
     await _auth.signOut();
   }
 
@@ -306,3 +321,5 @@ class AuthService {
     }
   }
 }
+
+

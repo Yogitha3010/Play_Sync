@@ -6,6 +6,7 @@ import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import 'match_detail_screen.dart';
+import 'match_score_calculator_screen.dart';
 
 class MyMatchesByGameScreen extends StatefulWidget {
   final String selectedGame;
@@ -175,6 +176,15 @@ class _MyMatchesByGameScreenState extends State<MyMatchesByGameScreen> {
                                   ),
                                 );
                               },
+                              onOpenCalculator: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        MatchScoreCalculatorScreen(match: match),
+                                  ),
+                                );
+                              },
                             );
                           },
                         ),
@@ -225,11 +235,13 @@ class _MatchCard extends StatelessWidget {
   final MatchModel match;
   final BookingModel? booking;
   final VoidCallback onTap;
+  final VoidCallback onOpenCalculator;
 
   const _MatchCard({
     required this.match,
     required this.booking,
     required this.onTap,
+    required this.onOpenCalculator,
   });
 
   String _getEffectiveStatus(MatchModel match) {
@@ -252,13 +264,13 @@ class _MatchCard extends StatelessWidget {
   Color _getStatusColor(String status) {
     switch (status) {
       case 'pending':
-        return Colors.orange;
+        return const Color(0xFFE79A2D);
       case 'active':
-        return Colors.green;
+        return AppTheme.secondary;
       case 'completed':
-        return Colors.blue;
+        return AppTheme.accent;
       default:
-        return Colors.grey;
+        return AppTheme.mutedText;
     }
   }
 
@@ -268,7 +280,6 @@ class _MatchCard extends StatelessWidget {
 
     return Card(
       margin: EdgeInsets.only(bottom: 15),
-      elevation: 3,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(15),
       ),
@@ -348,6 +359,28 @@ class _MatchCard extends StatelessWidget {
                     Text(
                       'Booked slot: ${booking!.slotTime}',
                       style: TextStyle(color: Colors.grey[700]),
+                    ),
+                  ],
+                ),
+              ],
+              if (effectiveStatus == 'active') ...[
+                SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: onOpenCalculator,
+                        icon: Icon(Icons.calculate_outlined),
+                        label: Text('Open Calculator'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.primary,
+                          side: BorderSide(color: AppTheme.border),
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),

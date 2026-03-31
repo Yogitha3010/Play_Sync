@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class PlayRequestModel {
   final String requestId;
   final String fromUserId;
@@ -42,12 +44,23 @@ class PlayRequestModel {
       toUserId: map['toUserId'] ?? '',
       gameType: map['gameType'] ?? '',
       turfId: map['turfId'] ?? '',
-      date: map['date'] != null ? DateTime.parse(map['date']) : DateTime.now(),
+      date: _parseDateTime(map['date']),
       slotTime: map['slotTime'] ?? '',
       status: map['status'] ?? 'pending',
-      createdAt: map['createdAt'] != null
-          ? DateTime.parse(map['createdAt'])
-          : DateTime.now(),
+      createdAt: _parseDateTime(map['createdAt']),
     );
+  }
+
+  static DateTime _parseDateTime(dynamic value) {
+    if (value is Timestamp) {
+      return value.toDate();
+    }
+    if (value is DateTime) {
+      return value;
+    }
+    if (value is String && value.isNotEmpty) {
+      return DateTime.tryParse(value) ?? DateTime.now();
+    }
+    return DateTime.now();
   }
 }
