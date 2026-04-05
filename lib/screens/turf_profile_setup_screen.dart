@@ -8,6 +8,7 @@ import '../models/user_model.dart';
 import '../theme/app_theme.dart';
 import 'role_selection_screen.dart';
 import 'turf_home_screen.dart';
+import 'chennai_location_picker_screen.dart';
 
 class TurfProfileSetupScreen extends StatefulWidget {
   final String ownerId;
@@ -31,6 +32,10 @@ class _TurfProfileSetupScreenState extends State<TurfProfileSetupScreen> {
   final _formKey = GlobalKey<FormState>();
   final turfNameController = TextEditingController();
   final locationController = TextEditingController();
+  
+  double _selectedLatitude = 0.0;
+  double _selectedLongitude = 0.0;
+  
   final priceController = TextEditingController();
   final contactController = TextEditingController();
   final ownerNameController = TextEditingController();
@@ -80,6 +85,8 @@ class _TurfProfileSetupScreenState extends State<TurfProfileSetupScreen> {
 
     turfNameController.text = turf.name;
     locationController.text = turf.location;
+    _selectedLatitude = turf.latitude;
+    _selectedLongitude = turf.longitude;
     priceController.text = turf.pricePerHour.toStringAsFixed(0);
     contactController.text = turf.contact ?? '';
     openingTimeController.text = turf.openingTime;
@@ -107,8 +114,34 @@ class _TurfProfileSetupScreenState extends State<TurfProfileSetupScreen> {
     }
   }
 
+  Future<void> _pickLocation() async {
+    final result = await Navigator.push<ChennaiLocationSelection>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChennaiLocationPickerScreen(
+          initialLabel: locationController.text.isNotEmpty 
+            ? locationController.text 
+            : null,
+        ),
+      ),
+    );
+
+    if (result != null && mounted) {
+      setState(() {
+        locationController.text = result.label;
+        _selectedLatitude = result.coordinates.latitude;
+        _selectedLongitude = result.coordinates.longitude;
+      });
+    }
+  }
+
   Future<void> _saveProfile() async {
     if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    if (_selectedLatitude == 0.0 && _selectedLongitude == 0.0) {
+      showMessage('Please select your turf location from the map');
       return;
     }
 
@@ -163,6 +196,8 @@ class _TurfProfileSetupScreenState extends State<TurfProfileSetupScreen> {
           ownerId: widget.ownerId,
           name: turfNameController.text.trim(),
           location: locationController.text.trim(),
+          latitude: _selectedLatitude,
+          longitude: _selectedLongitude,
           gamesAvailable: selectedGames,
           courts: courts,
           pricePerHour: double.tryParse(priceController.text) ?? 0.0,
@@ -180,6 +215,12 @@ class _TurfProfileSetupScreenState extends State<TurfProfileSetupScreen> {
           'name': turfNameController.text.trim(),
           'turfName': turfNameController.text.trim(),
           'location': locationController.text.trim(),
+          'latitude': _selectedLatitude,
+          'longitude': _selectedLongitude,
+          'coordinates': {
+            'latitude': _selectedLatitude,
+            'longitude': _selectedLongitude,
+          },
           'gamesAvailable': selectedGames,
           'gameTypes': selectedGames,
           'courts': courts,
@@ -356,12 +397,15 @@ class _TurfProfileSetupScreenState extends State<TurfProfileSetupScreen> {
               // Location
               TextFormField(
                 controller: locationController,
+                readOnly: true,
+                onTap: _pickLocation,
                 decoration: InputDecoration(
-                  labelText: 'Location *',
+                  labelText: 'Location (Tap to select on map) *',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                   prefixIcon: Icon(Icons.location_on),
+                  suffixIcon: Icon(Icons.map, color: AppTheme.primary),
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
