@@ -16,9 +16,11 @@ class RequestsScreen extends StatefulWidget {
   State<RequestsScreen> createState() => _RequestsScreenState();
 }
 
-class _RequestsScreenState extends State<RequestsScreen> {
+class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProviderStateMixin {
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
+
+  late TabController _tabController;
 
   bool isLoading = true;
   List<PlayRequestModel> incomingRequests = [];
@@ -29,7 +31,70 @@ class _RequestsScreenState extends State<RequestsScreen> {
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(_handleTabSelection);
     _loadRequests();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  void _handleTabSelection() {
+    if (_tabController.indexIsChanging) {
+      _markActiveTabAsRead();
+    }
+  }
+
+  Future<void> _markActiveTabAsRead() async {
+    final currentUser = _authService.currentUser;
+    if (currentUser == null) return;
+
+    if (_tabController.index == 0) {
+      if (incomingRequests.any((r) => !r.isReadByReceiver)) {
+        await _firestoreService.markIncomingRequestsAsRead(currentUser.uid);
+        setState(() {
+          incomingRequests = incomingRequests.map((r) => 
+            PlayRequestModel(
+              requestId: r.requestId,
+              fromUserId: r.fromUserId,
+              toUserId: r.toUserId,
+              gameType: r.gameType,
+              turfId: r.turfId,
+              date: r.date,
+              slotTime: r.slotTime,
+              status: r.status,
+              isReadByReceiver: true,
+              isReadBySender: r.isReadBySender,
+              createdAt: r.createdAt,
+            )
+          ).toList();
+        });
+      }
+    } else {
+      if (outgoingRequests.any((r) => !r.isReadBySender)) {
+        await _firestoreService.markOutgoingRequestsAsRead(currentUser.uid);
+        setState(() {
+          outgoingRequests = outgoingRequests.map((r) => 
+            PlayRequestModel(
+              requestId: r.requestId,
+              fromUserId: r.fromUserId,
+              toUserId: r.toUserId,
+              gameType: r.gameType,
+              turfId: r.turfId,
+              date: r.date,
+              slotTime: r.slotTime,
+              status: r.status,
+              isReadByReceiver: r.isReadByReceiver,
+              isReadBySender: true,
+              createdAt: r.createdAt,
+            )
+          ).toList();
+        });
+      }
+    }
   }
 
   String _displayName(PlayerProfileModel? profile) {
@@ -103,6 +168,8 @@ class _RequestsScreenState extends State<RequestsScreen> {
         outgoingRequests = outgoing;
         isLoading = false;
       });
+      
+      _markActiveTabAsRead();
     } catch (e) {
       if (!mounted) {
         return;
@@ -174,23 +241,27 @@ class _RequestsScreenState extends State<RequestsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text('Requests'),
-          backgroundColor: AppTheme.theme.primaryColor,
-          foregroundColor: Colors.white,
-          bottom: TabBar(
-            tabs: [
-              Tab(text: 'Incoming'),
-              Tab(text: 'Outgoing'),
-            ],
-          ),
+    return Scaffold(
+      appBar: AppBar(
+        automaticallyImplyLeading: false, // Prevent back button anomalies
+        title: Text('Requests'),
+        backgroundColor: AppTheme.theme.primaryColor,
+        foregroundColor: Colors.white,
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
+          indicatorColor: Colors.white,
+          tabs: [
+            Tab(text: 'Incoming'),
+            Tab(text: 'Outgoing'),
+          ],
         ),
-        body: isLoading
-            ? Center(child: CircularProgressIndicator())
-            : TabBarView(
+      ),
+      body: isLoading
+          ? Center(child: CircularProgressIndicator())
+          : TabBarView(
+              controller: _tabController,
                 children: [
                   _buildRequestList(
                     requests: incomingRequests,
@@ -202,7 +273,6 @@ class _RequestsScreenState extends State<RequestsScreen> {
                   ),
                 ],
               ),
-      ),
     );
   }
 
@@ -238,6 +308,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
           final request = requests[index];
           final profile = _profiles[incoming ? request.fromUserId : request.toUserId];
           final turf = _turfs[request.turfId];
+          final isUnread = incoming ? !request.isReadByReceiver : !request.isReadBySender;
 
           return Card(
             margin: EdgeInsets.only(bottom: 14),
@@ -251,6 +322,16 @@ class _RequestsScreenState extends State<RequestsScreen> {
                 children: [
                   Row(
                     children: [
+                      if (isUnread)
+                        Container(
+                          width: 8,
+                          height: 8,
+                          margin: EdgeInsets.only(right: 8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.secondary,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
                       CircleAvatar(
                         child: Text(_avatarInitial(profile)),
                       ),

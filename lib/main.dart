@@ -12,6 +12,8 @@ import 'screens/turf_profile_setup_screen.dart';
 import 'services/auth_service.dart';
 import 'services/firestore_service.dart';
 import 'services/push_notification_service.dart';
+import 'services/local_notification_service.dart';
+import 'services/firestore_notification_service.dart';
 import 'theme/app_theme.dart';
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
@@ -26,6 +28,7 @@ void main() async {
   await PushNotificationService.instance.initialize(
     navigatorKey: appNavigatorKey,
   );
+  await LocalNotificationService.instance.initialize();
   runApp(const PlaySyncApp());
 }
 
@@ -63,12 +66,17 @@ class AuthGate extends StatelessWidget {
 
         final user = snapshot.data;
         if (user == null) {
+          FirestoreNotificationService.instance.stopListening();
           return const RoleSelectionScreen();
         }
 
         if (!user.emailVerified) {
+          FirestoreNotificationService.instance.stopListening();
           return const RoleSelectionScreen();
         }
+
+        // Start listening to Firestore real-time notifications
+        FirestoreNotificationService.instance.startListening(user.uid);
 
         return FutureBuilder<_LaunchTarget?>(
           future: _resolveTarget(user.uid),

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../constants/game_constants.dart';
@@ -544,8 +545,72 @@ class FirestoreService {
 
     await requestRef.update({
       'status': status,
+      'isReadBySender': false,
+      'isReadByReceiver': true,
     });
   }
+
+  Future<void> markIncomingRequestsAsRead(String userId) async {
+    final snapshot = await FirebaseService.playRequestsCollection
+        .where('toUserId', isEqualTo: userId)
+        .where('isReadByReceiver', isEqualTo: false)
+        .get();
+        
+    final batch = FirebaseService.firestore.batch();
+    for (var doc in snapshot.docs) {
+      batch.update(doc.reference, {'isReadByReceiver': true});
+    }
+    await batch.commit();
+  }
+
+  Future<void> markOutgoingRequestsAsRead(String userId) async {
+    final snapshot = await FirebaseService.playRequestsCollection
+        .where('fromUserId', isEqualTo: userId)
+        .where('isReadBySender', isEqualTo: false)
+        .get();
+        
+    final batch = FirebaseService.firestore.batch();
+    for (var doc in snapshot.docs) {
+      batch.update(doc.reference, {'isReadBySender': true});
+    }
+    await batch.commit();
+  }
+
+  Stream<int> streamUnreadPlayRequestsCount(String userId) {
+    final incomingStream = FirebaseService.playRequestsCollection
+        .where('toUserId', isEqualTo: userId)
+        .where('isReadByReceiver', isEqualTo: false)
+        .snapshots();
+
+    final outgoingStream = FirebaseService.playRequestsCollection
+        .where('fromUserId', isEqualTo: userId)
+        .where('isReadBySender', isEqualTo: false)
+        .snapshots();
+
+    int incomingCount = 0;
+    int outgoingCount = 0;
+    
+    // ignore: close_sinks
+    late StreamController<int> controller;
+    
+    // We use a broadcast controller to prevent multiple subscriptions error
+    controller = StreamController<int>.broadcast(
+      onListen: () {
+        incomingStream.listen((snapshot) {
+          incomingCount = snapshot.docs.length;
+          controller.add(incomingCount + outgoingCount);
+        });
+
+        outgoingStream.listen((snapshot) {
+          outgoingCount = snapshot.docs.length;
+          controller.add(incomingCount + outgoingCount);
+        });
+      },
+    );
+
+    return controller.stream;
+  }
+
 
   Future<void> saveDeviceToken(String userId, String token) async {
     await FirebaseService.usersCollection.doc(userId).set({

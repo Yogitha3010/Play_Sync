@@ -9,6 +9,8 @@ class PlayRequestModel {
   final DateTime date;
   final String slotTime;
   final String status;
+  final bool isReadByReceiver;
+  final bool isReadBySender;
   final DateTime createdAt;
 
   const PlayRequestModel({
@@ -20,6 +22,8 @@ class PlayRequestModel {
     required this.date,
     required this.slotTime,
     this.status = 'pending',
+    this.isReadByReceiver = false,
+    this.isReadBySender = false,
     required this.createdAt,
   });
 
@@ -33,6 +37,8 @@ class PlayRequestModel {
       'date': date.toIso8601String(),
       'slotTime': slotTime,
       'status': status,
+      'isReadByReceiver': isReadByReceiver,
+      'isReadBySender': isReadBySender,
       'createdAt': createdAt.toIso8601String(),
     };
   }
@@ -47,6 +53,8 @@ class PlayRequestModel {
       date: _parseDateTime(map['date']),
       slotTime: map['slotTime'] ?? '',
       status: map['status'] ?? 'pending',
+      isReadByReceiver: map['isReadByReceiver'] ?? false,
+      isReadBySender: map['isReadBySender'] ?? false,
       createdAt: _parseDateTime(map['createdAt']),
     );
   }

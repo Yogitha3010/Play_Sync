@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/turf_model.dart';
 import '../services/firestore_service.dart';
+import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import 'available_matches_screen.dart';
 import 'chennai_location_picker_screen.dart';
@@ -34,6 +35,9 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
     const RequestsScreen(),
   ];
 
+  final AuthService _authService = AuthService();
+  final FirestoreService _firestoreService = FirestoreService();
+
   @override
   void initState() {
     super.initState();
@@ -42,50 +46,80 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final userId = _authService.currentUser?.uid;
+
+    return PopScope(
+      canPop: _currentIndex == 0,
+      onPopInvokedWithResult: (didPop, dynamic result) {
+        if (!didPop) {
+          setState(() {
+            _currentIndex = 0;
+          });
+        }
+      },
+      child: Scaffold(
       body: _screens[_currentIndex],
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
           color: Colors.white,
           border: Border(top: BorderSide(color: AppTheme.border)),
         ),
-        child: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: (index) {
-            setState(() {
-              _currentIndex = index;
-            });
-          },
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home_outlined),
-              activeIcon: Icon(Icons.home_rounded),
-              label: 'Home',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.search_outlined),
-              activeIcon: Icon(Icons.search_rounded),
-              label: 'Find Players',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.event_available_outlined),
-              activeIcon: Icon(Icons.event_available),
-              label: 'Matches',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.sports_soccer_outlined),
-              activeIcon: Icon(Icons.sports_soccer),
-              label: 'My Matches',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.mail_outline),
-              activeIcon: Icon(Icons.mail),
-              label: 'Requests',
-            ),
-          ],
+        child: StreamBuilder<int>(
+          stream: userId != null 
+              ? _firestoreService.streamUnreadPlayRequestsCount(userId) 
+              : const Stream.empty(),
+          builder: (context, snapshot) {
+            final unreadCount = snapshot.data ?? 0;
+
+            return BottomNavigationBar(
+              currentIndex: _currentIndex,
+              onTap: (index) {
+                setState(() {
+                  _currentIndex = index;
+                });
+              },
+              items: [
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.home_outlined),
+                  activeIcon: Icon(Icons.home_rounded),
+                  label: 'Home',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.search_outlined),
+                  activeIcon: Icon(Icons.search_rounded),
+                  label: 'Find Players',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.event_available_outlined),
+                  activeIcon: Icon(Icons.event_available),
+                  label: 'Matches',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.sports_soccer_outlined),
+                  activeIcon: Icon(Icons.sports_soccer),
+                  label: 'My Matches',
+                ),
+                BottomNavigationBarItem(
+                  icon: unreadCount > 0 
+                      ? Badge(
+                          label: Text('$unreadCount'),
+                          child: Icon(Icons.mail_outline),
+                        )
+                      : Icon(Icons.mail_outline),
+                  activeIcon: unreadCount > 0
+                      ? Badge(
+                          label: Text('$unreadCount'),
+                          child: Icon(Icons.mail),
+                        )
+                      : Icon(Icons.mail),
+                  label: 'Requests',
+                ),
+              ],
+            );
+          }
         ),
       ),
-    );
+    )); // Closed PopScope
   }
 }
 
