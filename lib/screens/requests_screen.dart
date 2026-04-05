@@ -53,8 +53,9 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
     if (currentUser == null) return;
 
     if (_tabController.index == 0) {
-      if (incomingRequests.any((r) => !r.isReadByReceiver)) {
-        await _firestoreService.markIncomingRequestsAsRead(currentUser.uid);
+      final unreadIncoming = incomingRequests.where((r) => !r.isReadByReceiver).toList();
+      if (unreadIncoming.isNotEmpty) {
+        await _firestoreService.markIncomingRequestsAsRead(unreadIncoming.map((r) => r.requestId).toList());
         setState(() {
           incomingRequests = incomingRequests.map((r) => 
             PlayRequestModel(
@@ -74,8 +75,9 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
         });
       }
     } else {
-      if (outgoingRequests.any((r) => !r.isReadBySender)) {
-        await _firestoreService.markOutgoingRequestsAsRead(currentUser.uid);
+      final unreadOutgoing = outgoingRequests.where((r) => !r.isReadBySender).toList();
+      if (unreadOutgoing.isNotEmpty) {
+        await _firestoreService.markOutgoingRequestsAsRead(unreadOutgoing.map((r) => r.requestId).toList());
         setState(() {
           outgoingRequests = outgoingRequests.map((r) => 
             PlayRequestModel(
@@ -241,9 +243,19 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
+    bool hasUnreadIncoming = incomingRequests.any((r) => !r.isReadByReceiver);
+    bool hasUnreadOutgoing = outgoingRequests.any((r) => !r.isReadBySender);
+
     return Scaffold(
       appBar: AppBar(
-        automaticallyImplyLeading: false, // Prevent back button anomalies
+        automaticallyImplyLeading: false, // Prevent back button anomalies natively
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            // Trigger the native PopScope in PlayerHomeScreen which redirects to Home
+            Navigator.maybePop(context);
+          },
+        ),
         title: Text('Requests'),
         backgroundColor: AppTheme.theme.primaryColor,
         foregroundColor: Colors.white,
@@ -253,8 +265,42 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
           unselectedLabelColor: Colors.white70,
           indicatorColor: Colors.white,
           tabs: [
-            Tab(text: 'Incoming'),
-            Tab(text: 'Outgoing'),
+            Tab(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Incoming'),
+                  if (hasUnreadIncoming)
+                    Container(
+                      margin: EdgeInsets.only(left: 6),
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: AppTheme.secondary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Tab(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Outgoing'),
+                  if (hasUnreadOutgoing)
+                    Container(
+                      margin: EdgeInsets.only(left: 6),
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: AppTheme.secondary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ],
         ),
       ),

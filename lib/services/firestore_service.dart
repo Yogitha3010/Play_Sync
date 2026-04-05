@@ -550,28 +550,24 @@ class FirestoreService {
     });
   }
 
-  Future<void> markIncomingRequestsAsRead(String userId) async {
-    final snapshot = await FirebaseService.playRequestsCollection
-        .where('toUserId', isEqualTo: userId)
-        .where('isReadByReceiver', isEqualTo: false)
-        .get();
-        
+  Future<void> markIncomingRequestsAsRead(List<String> requestIds) async {
+    if (requestIds.isEmpty) return;
     final batch = FirebaseService.firestore.batch();
-    for (var doc in snapshot.docs) {
-      batch.update(doc.reference, {'isReadByReceiver': true});
+    for (var id in requestIds) {
+      batch.update(FirebaseService.playRequestsCollection.doc(id), {
+        'isReadByReceiver': true,
+      });
     }
     await batch.commit();
   }
 
-  Future<void> markOutgoingRequestsAsRead(String userId) async {
-    final snapshot = await FirebaseService.playRequestsCollection
-        .where('fromUserId', isEqualTo: userId)
-        .where('isReadBySender', isEqualTo: false)
-        .get();
-        
+  Future<void> markOutgoingRequestsAsRead(List<String> requestIds) async {
+    if (requestIds.isEmpty) return;
     final batch = FirebaseService.firestore.batch();
-    for (var doc in snapshot.docs) {
-      batch.update(doc.reference, {'isReadBySender': true});
+    for (var id in requestIds) {
+      batch.update(FirebaseService.playRequestsCollection.doc(id), {
+        'isReadBySender': true,
+      });
     }
     await batch.commit();
   }

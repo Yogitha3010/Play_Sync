@@ -15,11 +15,8 @@ class FirestoreNotificationService {
   bool _isListening = false;
   String? _currentUserId;
 
-  final Set<String> _processedIncoming = {};
-  final Set<String> _processedOutgoing = {};
-
-  bool _isFirstIncoming = true;
-  bool _isFirstOutgoing = true;
+  DateTime? _listenStartTime;
+  final Set<String> _notifiedOutgoing = {};
 
   void startListening(String userId) {
     if (_isListening && _currentUserId == userId) return;
@@ -27,6 +24,7 @@ class FirestoreNotificationService {
     // Stop any existing subscriptions
     stopListening();
 
+    _listenStartTime = DateTime.now();
     _currentUserId = userId;
     _isListening = true;
 
@@ -35,21 +33,9 @@ class FirestoreNotificationService {
         .where('toUserId', isEqualTo: userId)
         .snapshots()
         .listen((snapshot) {
-      if (_isFirstIncoming) {
-        _isFirstIncoming = false;
-        // Populate cache without notifying
-        for (var doc in snapshot.docs) {
-          _processedIncoming.add(doc.id);
-        }
-        return;
-      }
-
       for (var change in snapshot.docChanges) {
         if (change.type == DocumentChangeType.added) {
-          if (!_processedIncoming.contains(change.doc.id)) {
-            _processedIncoming.add(change.doc.id);
-            _handleNewIncomingRequest(change.doc);
-          }
+          _handleNewIncomingRequest(change.doc);
         }
       }
     });
@@ -59,19 +45,6 @@ class FirestoreNotificationService {
         .where('fromUserId', isEqualTo: userId)
         .snapshots()
         .listen((snapshot) {
-      if (_isFirstOutgoing) {
-        _isFirstOutgoing = false;
-        // Populate cache to avoid notifying about already accepted/rejected ones
-        for (var doc in snapshot.docs) {
-          try {
-            final data = doc.data() as Map<String, dynamic>;
-            final status = data['status'] ?? 'pending';
-            _processedOutgoing.add('${doc.id}_$status');
-          } catch (_) {}
-        }
-        return;
-      }
-
       for (var change in snapshot.docChanges) {
         if (change.type == DocumentChangeType.modified) {
           _handleOutgoingRequestUpdate(change.doc);
@@ -87,10 +60,8 @@ class FirestoreNotificationService {
     _outgoingRequestsSubscription = null;
     _isListening = false;
     _currentUserId = null;
-    _processedIncoming.clear();
-    _processedOutgoing.clear();
-    _isFirstIncoming = true;
-    _isFirstOutgoing = true;
+    _listenStartTime = null;
+    _notifiedOutgoing.clear();
   }
 
   void _handleNewIncomingRequest(DocumentSnapshot doc) {
@@ -100,7 +71,9 @@ class FirestoreNotificationService {
       final data = doc.data() as Map<String, dynamic>;
       final request = PlayRequestModel.fromMap(data);
 
-      if (request.status == 'pending') {
+      if (request.status == 'pending' &&
+          _listenStartTime != null &&
+          request.createdAt.isAfter(_listenStartTime!)) {
         LocalNotificationService.instance.showNotification(
           id: request.requestId.hashCode,
           title: 'New Game Request',
@@ -118,14 +91,11 @@ class FirestoreNotificationService {
     try {
       final data = doc.data() as Map<String, dynamic>;
       final request = PlayRequestModel.fromMap(data);
-      
-      final stateKey = '${doc.id}_${request.status}';
-      if (_processedOutgoing.contains(stateKey)) {
-        return; // We already notified about this exact status for this doc
-      }
-      _processedOutgoing.add(stateKey);
 
-      // Check if it's accepted or rejected
+      final stateKey = '${doc.id}_${request.status}';
+      if (_notifiedOutgoing.contains(stateKey)) return;
+      _notifiedOutgoing.add(stateKey);
+
       if (request.status == 'accepted' || request.status == 'rejected') {
         final title = request.status == 'accepted' ? 'Request Accepted!' : 'Request Rejected';
         final body = request.status == 'accepted'
@@ -133,7 +103,7 @@ class FirestoreNotificationService {
             : 'Your game request has been rejected.';
 
         LocalNotificationService.instance.showNotification(
-          id: request.requestId.hashCode + 1, // Offset ID so it doesn't clash with incoming
+          id: request.requestId.hashCode + 1,
           title: title,
           body: body,
         );
