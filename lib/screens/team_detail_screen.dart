@@ -66,7 +66,10 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
     final user = _authService.currentUser;
     if (user != null) {
       if (_currentTeam.visibility == 'private') {
-        await _firestoreService.requestToJoinTeam(_currentTeam.teamId, user.uid);
+        await _firestoreService.requestToJoinTeam(
+          _currentTeam.teamId,
+          user.uid,
+        );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Join request sent to the team admin')),
@@ -87,7 +90,10 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
   }
 
   Future<void> _approveRequest(String playerId) async {
-    await _firestoreService.approveTeamJoinRequest(_currentTeam.teamId, playerId);
+    await _firestoreService.approveTeamJoinRequest(
+      _currentTeam.teamId,
+      playerId,
+    );
     final updatedTeam = await _firestoreService.getTeam(_currentTeam.teamId);
     if (updatedTeam != null && mounted) {
       setState(() {
@@ -98,7 +104,10 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
   }
 
   Future<void> _rejectRequest(String playerId) async {
-    await _firestoreService.rejectTeamJoinRequest(_currentTeam.teamId, playerId);
+    await _firestoreService.rejectTeamJoinRequest(
+      _currentTeam.teamId,
+      playerId,
+    );
     final updatedTeam = await _firestoreService.getTeam(_currentTeam.teamId);
     if (updatedTeam != null && mounted) {
       setState(() {
@@ -127,7 +136,8 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
     final user = _authService.currentUser;
     final isMember = user != null && _currentTeam.players.contains(user.uid);
     final isCreator = user != null && _currentTeam.createdBy == user.uid;
-    final hasRequested = user != null && _currentTeam.joinRequests.contains(user.uid);
+    final hasRequested =
+        user != null && _currentTeam.joinRequests.contains(user.uid);
 
     return Scaffold(
       appBar: AppBar(
@@ -162,28 +172,43 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                   Center(
                     child: CircleAvatar(
                       radius: 50,
-                      backgroundColor: AppTheme.theme.primaryColor.withOpacity(0.1),
-                      child: Icon(Icons.group, size: 50, color: AppTheme.theme.primaryColor),
+                      backgroundColor: AppTheme.theme.primaryColor.withOpacity(
+                        0.1,
+                      ),
+                      child: Icon(
+                        Icons.group,
+                        size: 50,
+                        color: AppTheme.theme.primaryColor,
+                      ),
                     ),
                   ),
                   SizedBox(height: 20),
                   Center(
                     child: Text(
                       _currentTeam.teamName,
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                   SizedBox(height: 10),
                   Center(
                     child: Container(
-                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.grey[200],
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
                         '${_currentTeam.gameType} - ${_currentTeam.visibility.toUpperCase()}',
-                        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[800]),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey[800],
+                        ),
                       ),
                     ),
                   ),
@@ -194,13 +219,18 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                         onPressed: isCreator
                             ? null
                             : (isMember
-                                ? _leaveTeam
-                                : (hasRequested ? null : _joinTeam)),
+                                  ? _leaveTeam
+                                  : (hasRequested ? null : _joinTeam)),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: isCreator
                               ? Colors.grey
-                              : (isMember ? Colors.red : AppTheme.theme.primaryColor),
-                          padding: EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                              : (isMember
+                                    ? Colors.red
+                                    : AppTheme.theme.primaryColor),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 40,
+                            vertical: 15,
+                          ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(30),
                           ),
@@ -209,8 +239,13 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                           isCreator
                               ? 'You Created This Team'
                               : (isMember
-                                  ? 'Leave Team'
-                                  : (hasRequested ? 'Request Sent' : (_currentTeam.visibility == 'private' ? 'Request to Join' : 'Join Team'))),
+                                    ? 'Leave Team'
+                                    : (hasRequested
+                                          ? 'Request Sent'
+                                          : (_currentTeam.visibility ==
+                                                    'private'
+                                                ? 'Request to Join'
+                                                : 'Join Team'))),
                           style: TextStyle(fontSize: 16, color: Colors.white),
                         ),
                       ),
@@ -234,15 +269,21 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => CreateMatchScreen(team: _currentTeam),
+                                builder: (_) =>
+                                    CreateMatchScreen(team: _currentTeam),
                               ),
                             );
                           },
                           icon: Icon(Icons.play_circle_fill),
                           label: Text('Start Match'),
                           style: OutlinedButton.styleFrom(
-                            padding: EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-                            side: BorderSide(color: AppTheme.theme.primaryColor),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 28,
+                              vertical: 14,
+                            ),
+                            side: BorderSide(
+                              color: AppTheme.theme.primaryColor,
+                            ),
                             foregroundColor: AppTheme.theme.primaryColor,
                           ),
                         ),
@@ -251,8 +292,11 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                   SizedBox(height: 30),
                   if (isCreator && _currentTeam.visibility == 'private') ...[
                     Text(
-                      'Join Requests (${_requestingPlayers.length})',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      'Join Request (${_requestingPlayers.length})',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     SizedBox(height: 10),
                     if (_requestingPlayers.isEmpty)
@@ -282,11 +326,13 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                               spacing: 8,
                               children: [
                                 TextButton(
-                                  onPressed: () => _rejectRequest(player.userId),
+                                  onPressed: () =>
+                                      _rejectRequest(player.userId),
                                   child: Text('Reject'),
                                 ),
                                 ElevatedButton(
-                                  onPressed: () => _approveRequest(player.userId),
+                                  onPressed: () =>
+                                      _approveRequest(player.userId),
                                   child: Text('Accept'),
                                 ),
                               ],
@@ -307,7 +353,8 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                     itemCount: _players.length,
                     itemBuilder: (context, index) {
                       final player = _players[index];
-                      final isTeamCreator = player.userId == _currentTeam.createdBy;
+                      final isTeamCreator =
+                          player.userId == _currentTeam.createdBy;
 
                       return Card(
                         margin: EdgeInsets.symmetric(vertical: 8),
@@ -315,22 +362,32 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                           leading: CircleAvatar(
                             backgroundColor: Colors.blue[100],
                             child: Text(
-                              (player.name?.isNotEmpty ?? false) ? player.name![0].toUpperCase() : '?',
+                              (player.name?.isNotEmpty ?? false)
+                                  ? player.name![0].toUpperCase()
+                                  : '?',
                               style: TextStyle(color: Colors.blue[900]),
                             ),
                           ),
                           title: Text(player.name ?? 'Unknown Player'),
-                          subtitle: Text('Skill Level: ${player.skillLevel.toStringAsFixed(1)}'),
+                          subtitle: Text(
+                            'Skill Level: ${player.skillLevel.toStringAsFixed(1)}',
+                          ),
                           trailing: isTeamCreator
                               ? Container(
-                                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Colors.amber[100],
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: Text(
                                     'Admin',
-                                    style: TextStyle(color: Colors.amber[900], fontSize: 12),
+                                    style: TextStyle(
+                                      color: Colors.amber[900],
+                                      fontSize: 12,
+                                    ),
                                   ),
                                 )
                               : null,
@@ -339,7 +396,9 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => PlayerDetailScreen(playerId: player.userId),
+                                  builder: (_) => PlayerDetailScreen(
+                                    playerId: player.userId,
+                                  ),
                                 ),
                               );
                             }
