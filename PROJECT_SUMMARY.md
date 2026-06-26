@@ -1,7 +1,15 @@
 # PlaySync - Project Summary
 
-## Overview
-PlaySync is a comprehensive Flutter mobile application for AI-based player matchmaking and team formation. The application helps players find other players with similar skill levels and nearby locations, create balanced teams, and improve gameplay experience through feedback and performance tracking.
+## Abstract
+PlaySync is a mobile application designed to revolutionize sports participation by connecting players through AI-powered matchmaking and facilitating organized gameplay. The application provides a centralized platform that enables sports enthusiasts to find compatible players based on skill levels, location proximity, and performance ratings, while allowing turf owners to manage their facilities effectively.
+
+The application features separate login interfaces for players and turf owners. Players can register and create profiles with their skill levels, preferred sports, and location information. The intelligent matchmaking system uses a weighted algorithm considering skill compatibility (40%), location proximity (30%), rating compatibility (20%), and experience level (10%) to suggest suitable match partners.
+
+Key features include automatic balanced team formation, digital toss functionality for match decisions, match status tracking, and a comprehensive feedback system where players can rate each other after games. The system automatically updates player ratings and awards achievements and badges based on performance and participation milestones.
+
+For turf owners, the application offers a dedicated interface to register and manage their sports facilities, including location details, available games, court information, pricing, and facilities. Owners can view and manage their registered turfs with active/inactive status.
+
+The application promotes community engagement in sports, enhances gameplay experiences through balanced matchmaking, and provides valuable performance insights through ratings and achievements. Built with Flutter and powered by Firebase, PlaySync ensures secure authentication, real-time data synchronization, and location-based services for seamless user experiences.
 
 ## Technology Stack
 - **Flutter** (Dart 3.11.0+)
