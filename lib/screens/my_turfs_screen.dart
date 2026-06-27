@@ -79,7 +79,7 @@ class _MyTurfsScreenState extends State<MyTurfsScreen> {
         backgroundColor: AppTheme.theme.colorScheme.primary,
         foregroundColor: Colors.white,
         icon: Icon(Icons.add),
-        label: Text('Add Turf'),
+        label: Text('Add Turf!'),
       ),
       body: isLoading
           ? Center(child: CircularProgressIndicator())
